@@ -26,6 +26,8 @@ hcl_target_names() {
 
 [[ -f "${workflow}" ]] || fail "workflow not found: ${workflow}"
 [[ -f "${bakefile}" ]] || fail "bake definition not found: ${bakefile}"
+grep -Fq 'types: [opened, reopened, synchronize, ready_for_review, converted_to_draft]' "${workflow}" \
+  || fail "PR events must include draft and ready transitions"
 
 # Every image the check builds must read from and write to the same BuildKit layer cache
 # that the candidate workflow populates on every push to main. Without it the check rebuilds
@@ -109,9 +111,9 @@ pr_jobs="$(awk '
 
 # Operators need a repeatable warm-cache measurement without manufacturing a pull request.
 # Arm64 remains the safe default because that is the historical on-demand behavior.
-[[ "${pr_jobs}" == *"if: github.event_name == 'pull_request' || inputs.build == 'amd64'"* ]] \
+[[ "${pr_jobs}" == *"if: (github.event_name == 'pull_request' && !github.event.pull_request.draft) || (github.event_name == 'workflow_dispatch' && inputs.build == 'amd64')"* ]] \
   || fail "amd64 jobs must support explicit on-demand cache measurements"
-[[ "$(grep -Fc "if: github.event_name == 'pull_request' || inputs.build == 'amd64'" "${workflow}")" == "2" ]] \
+[[ "$(grep -Fc "if: (github.event_name == 'pull_request' && !github.event.pull_request.draft) || (github.event_name == 'workflow_dispatch' && inputs.build == 'amd64')" "${workflow}")" == "2" ]] \
   || fail "both amd64 jobs must use the same pull-request/on-demand condition"
 [[ "$(grep -A1 -F '        default: arm64' "${workflow}")" == $'        default: arm64\n        type: choice' ]] \
   || fail "workflow dispatch must preserve arm64 as its default"
