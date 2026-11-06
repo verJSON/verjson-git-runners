@@ -3,7 +3,7 @@
 `runner.json` is the secret-free Kubernetes deployment reviewed for the shared
 GitLab/Nexus host. It creates the `verjson-runners` namespace, restricted admission,
 finite quota, explicit network policies, manager-only RBAC and the Nexus-pinned
-GitLab Runner 18.3.1 manager. Job pods use the unprivileged `default` service account
+GitLab Runner 19.5.2 manager. Job pods use the unprivileged `default` service account
 without an automatically mounted token. The manager uses its separately named
 service account to manage jobs in this namespace.
 
@@ -15,9 +15,13 @@ Nexus publication contract, including `.verjson/runtime-candidate.json`, then
 supply the approved GitLab URL and runner token through the deployment's secret
 management path. Do not merge it into a permissive existing runner configuration.
 
-GitLab Runner 18.3.1 requires the fixed advanced PodSpec merge patch to set
-`securityContext.seccompProfile.type: RuntimeDefault`. The generated patch only
-adds that scalar subtree; it does not replace container lists or remove runner
+The fixed advanced PodSpec merge patch sets
+`securityContext.seccompProfile.type: RuntimeDefault`. GitLab Runner 18.3.1 had no
+native pod seccomp setting. Runner 19.5.2 adds `pod_security_context.seccomp_profile`
+([config](https://gitlab.com/gitlab-org/gitlab-runner/-/blob/v19.5.2/common/config.go#L1032)),
+but the generator keeps the reviewed patch, and live 19.5.2 job pods were admitted with
+`RuntimeDefault`. Moving to the native setting would be a separate generator change.
+The generated patch only adds that scalar subtree; it does not replace container lists or remove runner
 security settings. The scripts/logs directories use `/tmp` for nonroot execution,
 and job label overrides are disabled so jobs cannot acquire the manager's
 network-policy label. Restricted Pod Security Admission remains enforced even
@@ -49,11 +53,13 @@ GitLab's matching-version and PodSpec configuration references:
 
 - https://docs.gitlab.com/runner/#gitlab-runner-versions
 - https://docs.gitlab.com/runner/configuration/advanced-configuration/#override-the-helper-image
-- https://gitlab.com/gitlab-org/gitlab-runner/-/blob/v18.3.1/docs/executors/kubernetes/_index.md
-- https://gitlab.com/gitlab-org/gitlab-runner/-/blob/v18.3.1/common/config.go
+- https://gitlab.com/gitlab-org/gitlab-runner/-/blob/v19.5.2/docs/executors/kubernetes/_index.md
+- https://gitlab.com/gitlab-org/gitlab-runner/-/blob/v19.5.2/common/config.go
 
-GitLab Runner 18.3.1 does not copy runner environment variables into the helper
-container environment. The fixed `nonroot-home` strategic PodSpec patch therefore
+Like 18.3.1, GitLab Runner 19.5.2 does not copy runner environment variables into the
+helper container environment. Its Kubernetes `buildContainer` assigns job variables only to
+the build and service containers
+([source](https://gitlab.com/gitlab-org/gitlab-runner/-/blob/v19.5.2/executors/kubernetes/kubernetes.go#L1793)). The fixed `nonroot-home` strategic PodSpec patch therefore
 sets `HOME=/tmp` on both named `build` and `helper` containers, preserving their
 other variables and generated container configuration. Runner environment sets
 the same value for generated script exports. This avoids pre-checkout global Git
@@ -78,11 +84,20 @@ A literal unexpanded token reference cannot authenticate. Do not install static
 fallback credentials in the runner environment or higher-priority project/group
 variables; inspect variable names and expansion flags without displaying values.
 
-GitLab Runner 18.3.1 creates the job-scoped Docker pull Secret before creating its
-pod, and the same Secret covers build and helper pulls. The synthetic exact-binary
-[proof](../../docs/gitlab/evidence/runner-18.3.1-job-pull-auth.json) records the
-measured request order and immutable runner image identity. It does not establish
-live GitLab, gateway or Nexus acceptance. Namespace-scoped manager permissions to
+GitLab Runner 19.5.2 creates the job-scoped Docker pull Secret before creating its
+pod, and the same Secret covers build and helper pulls
+([setup order](https://gitlab.com/gitlab-org/gitlab-runner/-/blob/v19.5.2/executors/kubernetes/kubernetes.go#L1241),
+[pull references](https://gitlab.com/gitlab-org/gitlab-runner/-/blob/v19.5.2/executors/kubernetes/kubernetes.go#L2687)).
+The [19.5.2 live observation](../../docs/gitlab/evidence/runner-19.5.2-job-pull-auth.json)
+covers two protected-main jobs on this canary. Each job Secret was created before its Pod.
+That Secret was the Pod's only pull reference, and digest pulls of the build and helper
+images succeeded with `Always`. The observation did not repeat the raw-variable control,
+the service-account-fallback control or expired-token denial. The earlier synthetic
+exact-binary [18.3.1 proof](../../docs/gitlab/evidence/runner-18.3.1-job-pull-auth.json)
+remains the only record of those controls, and it applies only to 18.3.1. Runner 19.5.2
+also adds `allowed_docker_credential_helpers`: a job's `DOCKER_AUTH_CONFIG` cannot run
+credential helpers unless that setting allows them. These jobs use inline credentials and
+are unaffected. Namespace-scoped manager permissions to
 create/delete job Secrets remain necessary; job service accounts receive no API
 token or corresponding permissions.
 

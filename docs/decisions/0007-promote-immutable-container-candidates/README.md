@@ -72,3 +72,29 @@ identity becomes the pinned canonical candidate workflow recorded in
 - **Share one repository tag across variants:** the canonical candidate identity is a
   version tag, so variants would overwrite one another instead of producing a complete
   immutable set.
+
+## Amendments
+
+The decision above is left as it was accepted. Later changes are recorded here instead
+of being edited into the original text.
+
+### 2026-11-05 — keyless Sigstore provenance replaces GitHub attestation
+
+Issue [#248](https://github.com/verJSON/verjson-git-runners/issues/248) regenerated the
+candidate and release callers at `verJSON/.github` v4.4.0
+(`b12cc46b8439d1573fcc32cf595854530361641b`). The organization adopted keyless container
+provenance in
+[ADR 0216](https://github.com/verJSON/.github/tree/b12cc46b8439d1573fcc32cf595854530361641b/docs/decisions/0216-keyless-container-provenance-is-verified-per-registry).
+Under that contract, candidate and release-manifest signatures are Cosign/Sigstore
+bundles attached as OCI referrers, so neither caller requests `attestations: write`.
+The "GitHub attestation" item that the Decision above keeps in force from ADR 0001 is
+therefore met by these Sigstore bundles. The signed-provenance requirement, the SPDX
+evidence, the signed release manifest, and the requirement for a pinned signer identity
+in `container-candidate.json` (now
+`container-candidate-publish.yml@b12cc46b8439d1573fcc32cf595854530361641b`) remain in
+force.
+
+Candidates published before this change carry GitHub attestations rather than Sigstore
+bundles. The next stable release should therefore promote a candidate built after this
+change. `container-deployment.json` still pins the v0.2.x release signer and must be
+updated before a release signed under this contract can be deployed.

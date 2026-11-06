@@ -63,8 +63,10 @@ release manifest. Automation consumes that signed manifest's digests, never muta
   `[self-hosted, docker]` jobs can run `docker build --secret` (BuildKit) and
   `docker compose` against a mounted host socket.
 - Every published image includes BuildKit SBOM and provenance attestations. Candidate
-  publication also attests the complete candidate manifest, and stable promotion retains
-  verified provenance/SPDX receipts plus an attested release manifest. Language and
+  publication also signs the complete candidate manifest, and stable promotion retains
+  verified provenance/SPDX receipts plus a signed release manifest. Signatures are keyless
+  Cosign/Sigstore bundles attached as OCI referrers, not GitHub Artifact Attestations
+  (ADR 0007 amendment). Language and
   PowerShell variants build from the exact base manifest
   digest output by that run, never from a mutable base tag.
 
