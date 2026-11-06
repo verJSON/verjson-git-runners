@@ -26,13 +26,13 @@ CONTAINER_DEPLOYMENT_CONTRACT = _PINS['container-deployment']
 # the same way in tests/privileged_merge_caller_contract_test.sh.
 GENERATED_CALLER_DIGESTS = {
     '.github/workflows/ai-review-merge.yml':
-        '07fd35d64d6f0647e290ee3e863ced72a4b4bd5351515a17f362f994623bf2eb',
+        '61c081b433662d8417d6d020b56d921ff34136e075bc8e5bd8432c85d35cce4e',
     '.github/workflows/gate-rearm.yml':
-        'f9d05ce32c449af5bfd4c8050dc1c7be8745b41504b38f8842e3aa9a5d1c7c7f',
+        '881a74214f5898865d862ed5557db26047cc3bd0de8a590c8d853fc16ff9b7ee',
     '.github/workflows/ai-review-lifecycle-rearm.yml':
-        '252c38a04883b42700bdf2d0cab76f3390d285d242f89a2eebb0d0ba80cfae32',
+        '3e7bcbe853f907da9d477036831f7a3c3cea0aad5daaf528b79a3d883e07af3f',
     '.github/workflows/ai-review-label-rearm.yml':
-        '4387bb0a0b4b38b9c98de73f6adf02835ff2f574ecce4398ed618180e7a95cf3',
+        'cd8bc999483fcd9e3bb4256c40ec428439c5e88c698a7be9f05f6f2b9b0e62a7',
 }
 
 
@@ -86,7 +86,8 @@ class ReviewCallerTest(unittest.TestCase):
         expected_uses = {
             'gate-rearm.yml':
                 'Verjson/.github/.github/workflows/gate-rearm.yml@' + AI_CALLER_CONTRACT,
-            'ai-review-lifecycle-rearm.yml': './.github/workflows/gate-rearm.yml',
+            'ai-review-lifecycle-rearm.yml':
+                'Verjson/.github/.github/workflows/gate-rearm.yml@' + AI_CALLER_CONTRACT,
             'ai-review-label-rearm.yml':
                 'Verjson/.github/.github/workflows/gate-rearm.yml@' + AI_CALLER_CONTRACT,
         }
@@ -133,19 +134,20 @@ class ReviewCallerTest(unittest.TestCase):
         # check silently. Match permissively, then assert that every reference
         # to a hub workflow in the tree was one this pattern consumed.
         pattern = re.compile(
-            r'Verjson/\.github/\.github/workflows/([A-Za-z0-9._-]+\.ya?ml)@([0-9a-f]{40})')
-        any_reference = re.compile(r'Verjson/\.github/\.github/workflows/\S+')
+            r'(?<![A-Za-z0-9-])(?i:verjson/\.github)/\.github/workflows/([A-Za-z0-9._-]+\.ya?ml)@([0-9a-f]{40})')
+        any_reference = re.compile(r'(?i:verjson/\.github)/\.github/workflows/')
         seen = set()
         for path in sorted((ROOT / '.github/workflows').glob('*.y*ml')):
             text = path.read_text()
-            matched = {m.group(0) for m in pattern.finditer(text)}
-            for reference in any_reference.findall(text):
-                reference = reference.rstrip("'\",")
-                self.assertTrue(
-                    any(reference.startswith(m) or m.startswith(reference)
-                        for m in matched),
-                    f'{path.name} references {reference}, which is not a '
-                    'pinned hub caller this test can check')
+            # Compare positions, not strings: a squatted owner such as
+            # `evilVerjson/.github/...` contains a legitimate reference as a
+            # substring, so a string comparison would let it pass.
+            matched = {m.start() for m in pattern.finditer(text)}
+            for reference in any_reference.finditer(text):
+                self.assertIn(
+                    reference.start(), matched,
+                    f'{path.name} references {text[text.rfind(" ", 0, reference.start()) + 1:].split()[0]}, '
+                    'which is not a pinned hub caller this test can check')
             for callee, sha in pattern.findall(text):
                 seen.add(callee)
                 self.assertIn(callee, families,
