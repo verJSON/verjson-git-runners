@@ -1,34 +1,66 @@
 #!/usr/bin/env bash
 set -euo pipefail
-ref='b12cc46b8439d1573fcc32cf595854530361641b'
-printf '%s  %s\n' '2f11c2945960d70f2fdfa5da00527e10858461a14bc83ce4977527d631c39e16' .github/workflows/container-release.yml | sha256sum --check --strict
+ref='635aca975b1aa93660138875ba9616b27693476f'
+# Every refusal names itself, so an adopter never has to bisect this file to
+# find the unmet assertion. The reporting only adds diagnostics: the ERR trap
+# re-exits with the failing command's status, naming its line and command.
+contract_fail() {
+  printf 'container-release contract FAILED: %s\n' "$*" >&2
+  exit 1
+}
+report_failed_assertion() {
+  local status=$?
+  printf 'container-release contract FAILED: line %s: %s (exit %s)\n' "$1" "$2" "$status" >&2
+  exit "$status"
+}
+trap 'report_failed_assertion "$LINENO" "$BASH_COMMAND"' ERR
+assert_digest() {
+  local path="$1" expected="$2" observed
+  printf '%s  %s\n' "$expected" "$path" | sha256sum --check --strict --status 2>/dev/null && return 0
+  observed="$(sha256sum -- "$path" 2>/dev/null | cut -d' ' -f1)" || observed=unreadable
+  contract_fail "$path drifted from contract $ref: expected sha256 $expected, observed ${observed:-unreadable}"
+}
+# `!` exempts a command from `set -e`, so a bare `! grep` can never fail this
+# file; and a grep that cannot read its input exits 2, which a negation would
+# take for absence.
+# The search runs at the call site's own words (`assert_absent grep ...`), so
+# its pattern stays visible to a reader and to the guard inventory.
+assert_absent() {
+  local search_status=0
+  "$@" || search_status=$?
+  [ "$search_status" -ne 1 ] || return 0
+  [ "$search_status" -ne 0 ] || contract_fail "found what must be absent: $*"
+  contract_fail "could not search (exit $search_status): $*"
+}
+assert_digest .github/workflows/container-release.yml '1c2861b1a0af7137478a0e70304ee02a9d863b171c5b5bb503976f9bec7b943e'
 grep -Fq "container-release.yml@$ref" .github/workflows/container-release.yml
 grep -Fq "contract-ref: $ref" .github/workflows/container-release.yml
 grep -q "workflow_dispatch:" .github/workflows/container-release.yml
-! grep -Eq '^  (push|pull_request):' .github/workflows/container-release.yml
+assert_absent grep -Eq '^  (push|pull_request):' .github/workflows/container-release.yml
 grep -q 'RELEASE_APP_CLIENT_ID' .github/workflows/container-release.yml
 grep -q 'release_environment: release-app' .github/workflows/container-release.yml
 grep -q '^    secrets: inherit$' .github/workflows/container-release.yml
-! grep -Eq 'PRIVATE_KEY' .github/workflows/container-release.yml
+assert_absent grep -Eq 'PRIVATE_KEY' .github/workflows/container-release.yml
 legacy_release_token='RELEASE_'"TOKEN"
 legacy_org_release_token='VERJSON_RELEASE_'"TOKEN"
-! grep -Eq "$legacy_release_token|$legacy_org_release_token" .github/workflows/container-release.yml
+assert_absent grep -Eq "$legacy_release_token|$legacy_org_release_token" .github/workflows/container-release.yml
 test -f scripts/container_release_promotion.py
 test -f scripts/container_release_manifest.py
 test -f scripts/container_registry_destinations.py
 test -f scripts/container_artifact_extract.py
 test -f scripts/container_attestation_verify.py
 test -f scripts/container_cosign_provenance.py
-printf '%s  %s\n' 'c2fb4dff5071bd4bd7f91020b1c92833fbe5f42b94ee8ae60ff75300c8ac61f9' scripts/container_release_promotion.py | sha256sum --check --strict
-printf '%s  %s\n' 'f63fdaa8c5896969689dd1e50656e5ae0536dd748986a9bacf7878809f52cad7' scripts/container_release_manifest.py | sha256sum --check --strict
-printf '%s  %s\n' 'a4d776fce5fc0c26657df20673c3e20f0f03b1916f2fee22d43669202bebbdfc' scripts/container_registry_destinations.py | sha256sum --check --strict
-printf '%s  %s\n' '78c98d7880cec62022cfa79f3019c48b5d8a59f362738229cac29a8388ca7588' scripts/container_artifact_extract.py | sha256sum --check --strict
-printf '%s  %s\n' '704e3d04d0a184515e7c3863d5b20e36ee22d61ac27055cf95381599c76c1abb' scripts/container_attestation_verify.py | sha256sum --check --strict
-printf '%s  %s\n' 'e785ad9fb49d60d0de25dd2214e2c03fbf7fa348a7df2407ee7f187757a91c74' scripts/container_cosign_provenance.py | sha256sum --check --strict
-! grep -Eq 'gh attestation verify|actions/attest-build-provenance@' .github/workflows/container-release.yml
+assert_digest scripts/container_release_promotion.py 'c2fb4dff5071bd4bd7f91020b1c92833fbe5f42b94ee8ae60ff75300c8ac61f9'
+assert_digest scripts/container_release_manifest.py '059b8b740eb225d55b79e2f8cbebab2d4ac165a42dffc48af61f240934195fc4'
+assert_digest scripts/container_registry_destinations.py 'cf107fd14bf26ea1b1fff92af7630df0015d0e8c4a9a58108a8f2d97ce5c1e72'
+assert_digest scripts/container_artifact_extract.py '78c98d7880cec62022cfa79f3019c48b5d8a59f362738229cac29a8388ca7588'
+assert_digest scripts/container_attestation_verify.py '704e3d04d0a184515e7c3863d5b20e36ee22d61ac27055cf95381599c76c1abb'
+assert_digest scripts/container_cosign_provenance.py 'e785ad9fb49d60d0de25dd2214e2c03fbf7fa348a7df2407ee7f187757a91c74'
+assert_absent grep -Eq 'gh attestation verify|actions/attest-build-provenance@' .github/workflows/container-release.yml
 grep -q 'Generated by Verjson/.github/scripts/gen-container-release.sh' .github/workflows/container-release.yml
 reconcile_allowlist='["images/rust.Dockerfile","images/node.Dockerfile","images/python.Dockerfile","images/go.Dockerfile","Dockerfile.pwsh","README.md"]'
-grep -Fqx "      reconcile-allowlist: '$reconcile_allowlist'" .github/workflows/container-release.yml
+grep -Fqx "      reconcile-allowlist: '$reconcile_allowlist'" .github/workflows/container-release.yml \
+  || contract_fail "the caller does not declare exactly the reviewed reconciliation allowlist: $reconcile_allowlist"
 test -f scripts/release-reconcile.sh
 test ! -L scripts/release-reconcile.sh
 test -x scripts/release-reconcile.sh

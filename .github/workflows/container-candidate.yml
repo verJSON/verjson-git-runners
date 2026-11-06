@@ -1,7 +1,7 @@
 # GENERATED FILE — do not edit by hand.
-# Contract: b12cc46b8439d1573fcc32cf595854530361641b
+# Contract: 635aca975b1aa93660138875ba9616b27693476f
 # Regenerate with:
-#   scripts/gen-container-candidate.sh workflow b12cc46b8439d1573fcc32cf595854530361641b container-candidate.json > .github/workflows/container-candidate.yml
+#   scripts/gen-container-candidate.sh workflow 635aca975b1aa93660138875ba9616b27693476f container-candidate.json > .github/workflows/container-candidate.yml
 name: immutable container candidate
 
 on:
@@ -15,11 +15,11 @@ jobs:
     permissions:
       actions: read
       contents: read
-    uses: Verjson/.github/.github/workflows/container-candidate.yml@b12cc46b8439d1573fcc32cf595854530361641b
+    uses: Verjson/.github/.github/workflows/container-candidate.yml@635aca975b1aa93660138875ba9616b27693476f
     with:
       config-path: container-candidate.json
       cleanup-unused-docker-images: false
-      contract-ref: b12cc46b8439d1573fcc32cf595854530361641b
+      contract-ref: 635aca975b1aa93660138875ba9616b27693476f
       retry-sha256: dcc9bbb4e257ae782949936ad503455d0396e95e74da781c62a8d1a7227a0552
   publish:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -28,11 +28,11 @@ jobs:
       contents: read
       packages: write
       id-token: write
-    uses: Verjson/.github/.github/workflows/container-candidate-publish.yml@b12cc46b8439d1573fcc32cf595854530361641b
+    uses: Verjson/.github/.github/workflows/container-candidate-publish.yml@635aca975b1aa93660138875ba9616b27693476f
     with:
       config-path: container-candidate.json
       cleanup-unused-docker-images: false
-      contract-ref: b12cc46b8439d1573fcc32cf595854530361641b
+      contract-ref: 635aca975b1aa93660138875ba9616b27693476f
       acquisition-sha256: a9b27a03b4283fff264a23b62f79f731ae1182d85eaa3aded31bd3b224fc2256
       transfer-sha256: 6bbd22f2e0c4814d661cb74e1e31e6ed1cb9b5cf744b35571749221579c0b14a
       disk-sha256: 728f26343beb7189c5522eebceb639c35e0eb37b2df20e4affa2c559918af160
