@@ -6,7 +6,7 @@
   "liveObservation": true,
   "syntheticOnly": false,
   "observedAt": "2026-11-06T02:13:27Z",
-  "method": "Kubernetes watch of Secrets and Pods in the canary namespace while the GitLab project-1 protected-main pipeline 12 ran on runner 1. Order is the resourceVersion of each object's ADDED event. Kubernetes documents resourceVersion as opaque, but it increases monotonically on this etcd-backed k3s cluster. Image digests come from Pod containerStatuses imageIDs. No credential values were read.",
+  "method": "Kubernetes watch of Secrets and Pods in the canary namespace while the GitLab project-1 protected-main pipeline 12 ran on runner 1. Order is the resourceVersion of each object's ADDED event. Kubernetes documents resourceVersion as opaque, but it increases monotonically on this etcd-backed k3s cluster. Image digests come from Pod containerStatuses imageIDs. No credential values were read. The manager's own running digest was confirmed from the live manager Pod's containerStatuses and initContainerStatuses imageID (`docker.nexus.159-195-78-163.nip.io/verjson/gitlab-runner/manager@sha256:800157105b792ed3f0c9bc0aa6bc6427d66889cafd2c8aae4c4c177194699144` for both the `config` init container and the `runner` container). `gitlab-runner --version` in that Pod reported 19.5.2 / 66ad5002.",
   "nodeRegistriesYamlPresent": false,
   "pullPolicy": "Always",
   "results": [

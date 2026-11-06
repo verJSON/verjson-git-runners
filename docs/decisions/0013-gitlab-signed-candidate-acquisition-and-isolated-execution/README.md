@@ -197,6 +197,19 @@ only a check performed at the boundary that matters is valid evidence for that b
 - This ADR does not itself unblock `Verjson/verjson-ci#30`; it defines the shape delivery must take
   once someone picks up implementation of the decomposed sub-issues.
 
+## Amendment 2026-11-06: GitLab Runner 19.5.2
+
+The canary and source managers now run GitLab Runner 19.5.2 (revision `66ad5002`), not
+18.3.1. The Context and Area 3 references to 18.3.1 and its `: | eval` writer are kept as
+written on 2026-09-25. Runner 19.5.2's default Bash writer is
+`(trap 'exit 1' TERM; eval …) < /dev/null`. The `: | eval` form is used only when
+`FF_USE_LEGACY_BASH_EVAL` is set. Both forms leave a live eval subshell that holds the job
+environment, so the isolation obligation is unchanged. The dated 19.5.2 re-verification,
+and the boundary test that now covers both writer forms, are in the
+[ADR 0020 (verjson-ci) amendment of 2026-11-06](https://github.com/Verjson/verjson-ci/tree/main/docs/decisions/0020-source-process-isolation),
+which lands with Verjson/verjson-ci#336. This repository's 19.5.2 job pull-Secret
+observation is in `docs/gitlab/evidence/runner-19.5.2-job-pull-auth.json`.
+
 ## References
 
 - [ADR 0020 (verjson-ci) — Isolate signed source execution from credential processes](https://github.com/Verjson/verjson-ci/tree/main/docs/decisions/0020-source-process-isolation)

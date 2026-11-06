@@ -1,5 +1,5 @@
 ---
-date: 2026-11-05
+date: 2026-11-06
 id: 1f67b3220e
 impact: patch
 title: Run the GitLab runner canary on GitLab Runner 19.5.2
