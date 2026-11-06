@@ -26,7 +26,8 @@ hcl_target_names() {
 
 [[ -f "${workflow}" ]] || fail "workflow not found: ${workflow}"
 [[ -f "${bakefile}" ]] || fail "bake definition not found: ${bakefile}"
-grep -Fq 'types: [opened, reopened, synchronize, ready_for_review, converted_to_draft]' "${workflow}" \
+awk '/^  pull_request:/ { inside = 1; next } inside && /^  [A-Za-z_]+:/ { inside = 0 } inside' "${workflow}" \
+  | grep -Eq '^ +types: \[opened, reopened, synchronize, ready_for_review, converted_to_draft\]$' \
   || fail "PR events must include draft and ready transitions"
 
 # Every image the check builds must read from and write to the same BuildKit layer cache
