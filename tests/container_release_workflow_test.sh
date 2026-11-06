@@ -8,9 +8,9 @@ candidate="${root}/.github/workflows/container-candidate.yml"
 release="${root}/.github/workflows/container-release.yml"
 candidate_validator="${root}/scripts/container_candidate_validate.py"
 manifest_validator="${root}/scripts/container_release_manifest.py"
-candidate_contract_ref="3b83ddeaa421e60005e15d36e946e2f83832bacb"
-release_contract_ref="3b83ddeaa421e60005e15d36e946e2f83832bacb"
-changelog_sha256="189247b860a0fbdeffc6aaa5432af0128957549acf69a2e291de82b62ad5515b"
+candidate_contract_ref="b12cc46b8439d1573fcc32cf595854530361641b"
+release_contract_ref="b12cc46b8439d1573fcc32cf595854530361641b"
+changelog_sha256="94c8ce0ee488ffd7a65896b46a0e9ac0d681d2d8a86655c45af99ed2d4847f5e"
 release_manifest="$(find "${root}/RELEASES/containers" -maxdepth 1 -type f -name 'v*.json' -print | sort -V | tail -n 1)"
 [[ -n "${release_manifest}" ]] || {
   echo "container release workflow contract: no immutable container release manifest exists" >&2
@@ -119,8 +119,10 @@ grep -q "if: github.event_name == 'pull_request'" "${candidate}" \
   || fail "candidate validation is not restricted to pull requests"
 grep -q "if: github.event_name == 'push' && github.ref == 'refs/heads/main'" "${candidate}" \
   || fail "candidate publication is not restricted to trusted main pushes"
-[[ "$(grep -c '^      attestations: write$' "${candidate}")" -eq 1 ]] \
-  || fail "only trusted candidate publication may write attestations"
+! grep -Eq '^[[:space:]]+attestations: write$' "${candidate}" \
+  || fail "candidate caller must not grant unused GitHub attestation authority"
+grep -q '^      provenance-sha256: [0-9a-f]\{64\}$' "${candidate}" \
+  || fail "candidate publication must pin the canonical provenance helper"
 [[ "$(grep -c '^      packages: write$' "${candidate}")" -eq 1 ]] \
   || fail "only trusted candidate publication may write packages"
 [[ "$(grep -c '^      id-token: write$' "${candidate}")" -eq 1 ]] \
@@ -135,8 +137,10 @@ grep -qx '  workflow_dispatch:' "${release}" || fail "stable promotion is not ex
   || fail "release caller rebuilds instead of promoting retained digests"
 grep -Fq "container-release.yml@${release_contract_ref}" "${release}" \
   || fail "release caller does not use the reviewed canonical contract"
-grep -qx '  attestations: write' "${release}" \
-  || fail "release caller cannot publish a signed release manifest"
+! grep -Eq '^[[:space:]]+attestations: write$' "${release}" \
+  || fail "release caller must not grant unused GitHub attestation authority"
+grep -qx '  id-token: write' "${release}" \
+  || fail "release caller cannot authenticate the canonical Sigstore signing flow"
 grep -qx '  packages: write' "${release}" \
   || fail "release caller cannot promote or retain packages with its job token"
 grep -Fq 'release_app_client_id: ${{ vars.RELEASE_APP_CLIENT_ID }}' "${release}" \
@@ -151,5 +155,7 @@ grep -qx '    secrets: inherit' "${release}" \
   || fail "release caller restores the legacy release credential"
 [[ -x "${root}/scripts/container_attestation_verify.py" ]] \
   || fail "release caller lacks the generated attestation verifier"
+[[ -x "${root}/scripts/container_cosign_provenance.py" ]] \
+  || fail "release caller lacks the generated Sigstore provenance helper"
 
 echo "container release workflow tests passed"
