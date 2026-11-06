@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # GENERATED FILE — do not edit by hand.
-# Contract: b12cc46b8439d1573fcc32cf595854530361641b
+# Contract: 635aca975b1aa93660138875ba9616b27693476f
 # Regenerate with:
-#   scripts/gen-container-candidate.sh contract-test b12cc46b8439d1573fcc32cf595854530361641b container-candidate.json > scripts/container-candidate-contract.test.sh
+#   scripts/gen-container-candidate.sh contract-test 635aca975b1aa93660138875ba9616b27693476f container-candidate.json > scripts/container-candidate-contract.test.sh
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 caller="$root/.github/workflows/container-candidate.yml"
@@ -13,12 +13,12 @@ fail() { echo "ERROR: $*" >&2; exit 1; }
 [ -f "$caller" ] || fail "generated caller is missing"
 [ -f "$validator" ] || fail "generated validator is missing"
 [ -f "$destination_helper" ] || fail "generated destination helper is missing"
-grep -qx '# Contract: b12cc46b8439d1573fcc32cf595854530361641b' "$caller" || fail "caller contract pin differs"
-grep -qx '# Contract: b12cc46b8439d1573fcc32cf595854530361641b' "$validator" || fail "validator contract pin differs"
-grep -qx '# Contract: b12cc46b8439d1573fcc32cf595854530361641b' "$destination_helper" || fail "destination helper contract pin differs"
-[ "$(grep -c 'uses: Verjson/.github/.github/workflows/container-candidate.yml@b12cc46b8439d1573fcc32cf595854530361641b' "$caller")" -eq 1 ] || fail "validation does not use the pinned read-only reusable workflow"
-[ "$(grep -c 'uses: Verjson/.github/.github/workflows/container-candidate-publish.yml@b12cc46b8439d1573fcc32cf595854530361641b' "$caller")" -eq 1 ] || fail "publication does not use the pinned publication reusable workflow"
-[ "$(grep -c 'contract-ref: b12cc46b8439d1573fcc32cf595854530361641b' "$caller")" -eq 2 ] || fail "caller does not pass the shared pin to both event paths"
+grep -qx '# Contract: 635aca975b1aa93660138875ba9616b27693476f' "$caller" || fail "caller contract pin differs"
+grep -qx '# Contract: 635aca975b1aa93660138875ba9616b27693476f' "$validator" || fail "validator contract pin differs"
+grep -qx '# Contract: 635aca975b1aa93660138875ba9616b27693476f' "$destination_helper" || fail "destination helper contract pin differs"
+[ "$(grep -c 'uses: Verjson/.github/.github/workflows/container-candidate.yml@635aca975b1aa93660138875ba9616b27693476f' "$caller")" -eq 1 ] || fail "validation does not use the pinned read-only reusable workflow"
+[ "$(grep -c 'uses: Verjson/.github/.github/workflows/container-candidate-publish.yml@635aca975b1aa93660138875ba9616b27693476f' "$caller")" -eq 1 ] || fail "publication does not use the pinned publication reusable workflow"
+[ "$(grep -c 'contract-ref: 635aca975b1aa93660138875ba9616b27693476f' "$caller")" -eq 2 ] || fail "caller does not pass the shared pin to both event paths"
 [ "$(grep -c 'cleanup-unused-docker-images: false' "$caller")" -eq 2 ] || fail "caller does not pass the reviewed cleanup setting to both event paths"
 [ "$(grep -c 'acquisition-sha256: a9b27a03b4283fff264a23b62f79f731ae1182d85eaa3aded31bd3b224fc2256' "$caller")" -eq 1 ] || fail "only trusted publication may pin the acquisition implementation digest"
 [ "$(grep -c 'transfer-sha256: 6bbd22f2e0c4814d661cb74e1e31e6ed1cb9b5cf744b35571749221579c0b14a' "$caller")" -eq 1 ] || fail "trusted publication does not pin the dependency transfer implementation digest"
@@ -34,9 +34,9 @@ grep -qx '# Contract: b12cc46b8439d1573fcc32cf595854530361641b' "$destination_he
 [ "$(grep -c '^      id-token: write$' "$caller")" -eq 1 ] || fail "only publication may mint attestation identity"
 grep -q "if: github.event_name == 'pull_request'" "$caller" || fail "validation is not restricted to pull requests"
 grep -q "if: github.event_name == 'push' && github.ref == 'refs/heads/main'" "$caller" || fail "publication is not restricted to trusted main pushes"
-[ "$(sha256sum "$caller" | cut -d' ' -f1)" = "ff75555afdc076ab11a798fec055976a94e3359a7b1e83581fd1360218d2d4df" ] || fail "generated caller was edited"
-[ "$(sha256sum "$validator" | cut -d' ' -f1)" = "f63fdaa8c5896969689dd1e50656e5ae0536dd748986a9bacf7878809f52cad7" ] || fail "generated validator was edited"
-[ "$(sha256sum "$destination_helper" | cut -d' ' -f1)" = "a4d776fce5fc0c26657df20673c3e20f0f03b1916f2fee22d43669202bebbdfc" ] || fail "generated destination helper was edited"
+[ "$(sha256sum "$caller" | cut -d' ' -f1)" = "69e49907a0a14e111cfa9f5280e12e51daf5be0e656b1093af09e6f17dca01af" ] || fail "generated caller was edited"
+[ "$(sha256sum "$validator" | cut -d' ' -f1)" = "059b8b740eb225d55b79e2f8cbebab2d4ac165a42dffc48af61f240934195fc4" ] || fail "generated validator was edited"
+[ "$(sha256sum "$destination_helper" | cut -d' ' -f1)" = "cf107fd14bf26ea1b1fff92af7630df0015d0e8c4a9a58108a8f2d97ce5c1e72" ] || fail "generated destination helper was edited"
 if grep -Eq 'secrets: inherit|registry-namespace:|environment:' "$caller"; then
   fail "caller may not inherit credentials or inject registry namespaces or environments"
 fi
@@ -52,7 +52,7 @@ if grep -Eq 'packages: read|secrets:|NODE_AUTH_TOKEN' "$validation_job"; then
 else
   ! grep -q 'NODE_AUTH_TOKEN\|packages: read' "$caller" || fail "public-only caller exposes package credentials or read authority"
 fi
-# Publication signs as Verjson/.github/.github/workflows/container-candidate-publish.yml@b12cc46b8439d1573fcc32cf595854530361641b and refuses any other declared identity, but
+# Publication signs as Verjson/.github/.github/workflows/container-candidate-publish.yml@635aca975b1aa93660138875ba9616b27693476f and refuses any other declared identity, but
 # only after building and publishing; a stale identity fails here first.
 [ -f "$root/container-candidate.json" ] || fail "candidate config container-candidate.json is missing"
 python3 -I -c '
@@ -64,6 +64,6 @@ sys.exit(0 if isinstance(images, list) and images and all(
     isinstance(image, dict) and isinstance(image.get("provenance"), dict)
     and image["provenance"].get("builderIdentity") == sys.argv[2]
     for image in images) else 1)
-' "$root/container-candidate.json" 'Verjson/.github/.github/workflows/container-candidate-publish.yml@b12cc46b8439d1573fcc32cf595854530361641b'   || fail "every image in container-candidate.json must declare provenance.builderIdentity Verjson/.github/.github/workflows/container-candidate-publish.yml@b12cc46b8439d1573fcc32cf595854530361641b, the publishing entrypoint at this contract"
+' "$root/container-candidate.json" 'Verjson/.github/.github/workflows/container-candidate-publish.yml@635aca975b1aa93660138875ba9616b27693476f'   || fail "every image in container-candidate.json must declare provenance.builderIdentity Verjson/.github/.github/workflows/container-candidate-publish.yml@635aca975b1aa93660138875ba9616b27693476f, the publishing entrypoint at this contract"
 python3 "$validator" --help >/dev/null
 echo "container candidate generated contract passed"

@@ -26,13 +26,13 @@ CONTAINER_DEPLOYMENT_CONTRACT = _PINS['container-deployment']
 # the same way in tests/privileged_merge_caller_contract_test.sh.
 GENERATED_CALLER_DIGESTS = {
     '.github/workflows/ai-review-merge.yml':
-        '61c081b433662d8417d6d020b56d921ff34136e075bc8e5bd8432c85d35cce4e',
+        '787be454dbb9710631fea2c51c0b736cc06921305e0f847328ab0f7314a673fb',
     '.github/workflows/gate-rearm.yml':
-        '881a74214f5898865d862ed5557db26047cc3bd0de8a590c8d853fc16ff9b7ee',
+        '1b1de3179b5ef23eda2d7bbdb4e6c0538a582269c15bf212ff55802a0a8f41e3',
     '.github/workflows/ai-review-lifecycle-rearm.yml':
-        '3e7bcbe853f907da9d477036831f7a3c3cea0aad5daaf528b79a3d883e07af3f',
+        '81d3eb796f18d1e25cde9e971a1bc9e1ea866a712327cf50d55a4195c34e2ba1',
     '.github/workflows/ai-review-label-rearm.yml':
-        'cd8bc999483fcd9e3bb4256c40ec428439c5e88c698a7be9f05f6f2b9b0e62a7',
+        'ae9d45875d1cb06aca9d151645c34dfca4e68f80b191b194672a4ad20294d29a',
 }
 
 

@@ -1,6 +1,6 @@
 # GENERATED FILE — do not edit by hand.
 # Regenerate with:
-# scripts/gen-ai-review-label-rearm-caller.sh b12cc46b8439d1573fcc32cf595854530361641b > .github/workflows/ai-review-label-rearm.yml
+# scripts/gen-ai-review-label-rearm-caller.sh 635aca975b1aa93660138875ba9616b27693476f > .github/workflows/ai-review-label-rearm.yml
 name: AI review label re-arm
 
 on:
@@ -19,7 +19,7 @@ jobs:
       contents: read
       issues: write
       pull-requests: write
-    uses: Verjson/.github/.github/workflows/gate-rearm.yml@b12cc46b8439d1573fcc32cf595854530361641b
+    uses: Verjson/.github/.github/workflows/gate-rearm.yml@635aca975b1aa93660138875ba9616b27693476f
     secrets: inherit
     with:
       ai_review_environment: ai-review-app
