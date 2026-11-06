@@ -197,11 +197,14 @@ only a check performed at the boundary that matters is valid evidence for that b
 - This ADR does not itself unblock `Verjson/verjson-ci#30`; it defines the shape delivery must take
   once someone picks up implementation of the decomposed sub-issues.
 
-## Amendment 2026-11-06: GitLab Runner 19.5.2
+## Amendments
 
-The canary and source managers now run GitLab Runner 19.5.2 (revision `66ad5002`), not
-18.3.1. The Context and Area 3 references to 18.3.1 and its `: | eval` writer are kept as
-written on 2026-09-25. Runner 19.5.2's default Bash writer is
+### 2026-11-06 — GitLab Runner 19.5.2
+
+The canary manager (`deploy/gitlab/runner.json`) now runs GitLab Runner 19.5.2 (revision
+`66ad5002`), not 18.3.1. So does the verjson-ci source manager (`deploy/gitlab-source`
+in Verjson/verjson-ci#336). The Context and Area 3 references to 18.3.1, and Context's
+`: | eval` writer, are kept as written on 2026-09-25. Runner 19.5.2's default Bash writer is
 `(trap 'exit 1' TERM; eval …) < /dev/null`. The `: | eval` form is used only when
 `FF_USE_LEGACY_BASH_EVAL` is set. Both forms leave a live eval subshell that holds the job
 environment, so the isolation obligation is unchanged. The dated 19.5.2 re-verification,
