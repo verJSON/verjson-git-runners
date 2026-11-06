@@ -7,6 +7,7 @@ name: image build check
 on:
   pull_request:
     branches: [main]
+    types: [opened, reopened, synchronize, ready_for_review, converted_to_draft]
     paths:
       - Dockerfile
       - Dockerfile.pwsh
@@ -44,11 +45,12 @@ permissions:
   contents: read
 
 jobs:
-  # The amd64 legs answer "did this PR break the build?", so they stay on pull_request only:
+  # The amd64 legs answer "did this PR break the build?", so they run on non-draft
+  # pull_request events and on a manual amd64 dispatch, never on a schedule:
   # on a schedule they would re-prove what the candidate workflow builds natively on
   # every push to main, and the cron exists purely for the arm64 gap below.
   base-and-kinds:
-    if: github.event_name == 'pull_request' || inputs.build == 'amd64'
+    if: (github.event_name == 'pull_request' && !github.event.pull_request.draft) || (github.event_name == 'workflow_dispatch' && inputs.build == 'amd64')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -77,7 +79,7 @@ jobs:
           targets: pr-check
 
   root:
-    if: github.event_name == 'pull_request' || inputs.build == 'amd64'
+    if: (github.event_name == 'pull_request' && !github.event.pull_request.draft) || (github.event_name == 'workflow_dispatch' && inputs.build == 'amd64')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
