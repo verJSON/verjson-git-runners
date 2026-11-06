@@ -271,6 +271,12 @@ def validate_metadata(path: Path, metadata: dict[str, str]) -> str:
         raise ChangelogError(f"{path}: exactly one of issue or id is required")
     if "issue" in metadata:
         if not metadata["issue"].isdigit() or int(metadata["issue"]) < 1:
+            if re.fullmatch(r"(?:[0-9]{8}T[0-9]{6}Z|[0-9a-fA-F]{6,12})", metadata["issue"]):
+                raise ChangelogError(
+                    f"{path}: issue must be a positive integer; {metadata['issue']} "
+                    "is an issue-less identity — move it to the id key "
+                    "(the filename keeps its -issue- segment either way)"
+                )
             raise ChangelogError(f"{path}: issue must be a positive integer")
         reference_issues(path, metadata)
         return f"issue:{int(metadata['issue'])}"
@@ -410,6 +416,28 @@ def fragments(
     return result
 
 
+def require_revision(option: str, value: str) -> None:
+    """Refuse a blank revision instead of letting Git resolve it to HEAD.
+
+    `git diff "...HEAD"` and `git diff "BASE..."` both fill a blank side in
+    with HEAD, so an unset `BASE_SHA` reaching this gate compares HEAD against
+    itself: every requirement below evaluates over an empty diff and the gate
+    exits 0. A caller that lost its revision must be told so, not told the
+    pull request is clean.
+    """
+    if not value.strip():
+        raise ChangelogError(
+            f"{option} is empty; a revision is required so the comparison "
+            "cannot silently resolve to HEAD and pass over an empty diff"
+        )
+    if value.startswith("-"):
+        raise ChangelogError(
+            f"{option} looks like an option, not a revision: {value!r}. "
+            "Git would consume it as one and diff nothing, so the gate would "
+            "pass over an empty diff."
+        )
+
+
 def added_fragment_paths(repo_root: Path, base: str, head: str) -> set[str]:
     added: set[str] = set()
     for line in git(
@@ -417,6 +445,7 @@ def added_fragment_paths(repo_root: Path, base: str, head: str) -> set[str]:
         "diff",
         "--find-renames",
         "--name-status",
+        "--end-of-options",
         f"{base}...{head}",
     ).splitlines():
         fields = line.split("\t")
@@ -472,6 +501,8 @@ def validate_new_fragment_impacts(
     head: str,
     entries: list[Fragment] | None = None,
 ) -> None:
+    require_revision("--base", base)
+    require_revision("--head", head)
     if entries is None:
         entries = fragments(repo_root)
     entries_by_path = {
@@ -816,6 +847,14 @@ def selection_digest(
     )
     if not selected:
         return None
+    return selection_digest_for_entries(component, prefix, selected)
+
+
+def selection_digest_for_entries(
+    component: str | None,
+    prefix: str,
+    selected: list[Fragment],
+) -> str:
     canonical = json.dumps(
         {
             "component": component or "",
@@ -829,6 +868,19 @@ def selection_digest(
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def next_version_for_entries(
+    repo_root: Path,
+    prefix: str,
+    selected: list[Fragment],
+) -> str:
+    version = derived_release_version(repo_root, prefix, selected)
+    if version is None:
+        raise ChangelogError(
+            f"cannot derive the next version for {prefix} without a previous release"
+        )
+    return version
+
+
 def next_version(
     repo_root: Path,
     selected_names: list[str],
@@ -840,12 +892,77 @@ def next_version(
         raise ChangelogError(
             "version prefix must be v or a lowercase stream name followed by -v"
         )
-    version = derived_release_version(repo_root, prefix, selected)
-    if version is None:
+    return next_version_for_entries(repo_root, prefix, selected)
+
+
+def release_plan(
+    repo_root: Path,
+    version: str,
+    selected_names: list[str],
+    component: str | None = None,
+    prefix: str = "v",
+) -> dict[str, object]:
+    if SEMVER_PREFIX.fullmatch(prefix) is None:
         raise ChangelogError(
-            f"cannot derive the next version for {prefix} without a previous release"
+            "version prefix must be v or a lowercase stream name followed by -v"
         )
-    return version
+    selected = select_release_fragments(
+        repo_root,
+        selected_names,
+        component,
+        allow_empty=True,
+    )
+    requested = SEMVER_RELEASE.fullmatch(version) if version else None
+    if version and requested is None:
+        raise ChangelogError(
+            "version must be v-prefixed SemVer, optionally with a stream prefix"
+        )
+    if requested is not None and requested["prefix"] != prefix:
+        raise ChangelogError(
+            f"version namespace {requested['prefix']!r} does not match prefix {prefix!r}"
+        )
+    if not selected:
+        return {
+            "bump": None,
+            "bump_rationale": "No unreleased fragments are selected; no release will be created.",
+            "component": component or "",
+            "fragments": [],
+            "previous_release": None,
+            "preview": "",
+            "prefix": prefix,
+            "selected": False,
+            "selection_digest": None,
+            "version": version or None,
+        }
+    resolved = version or next_version_for_entries(repo_root, prefix, selected)
+    validate_release_bump(repo_root, resolved, selected)
+    bump = derived_release_bump(repo_root, prefix, selected)
+    previous_release = None
+    impact = "bootstrap"
+    rationale = (
+        "Bootstrap release: the explicit version is accepted because no prior "
+        "release exists for this namespace."
+    )
+    if bump is not None:
+        previous_core, impact, expected_core = bump
+        previous_release = prefix + ".".join(map(str, previous_core))
+        expected_release = prefix + ".".join(map(str, expected_core))
+        rationale = (
+            f"The highest selected fragment impact is {impact}; the canonical "
+            f"release rule advances {previous_release} to {expected_release}."
+        )
+    return {
+        "bump": impact,
+        "bump_rationale": rationale,
+        "component": component or "",
+        "fragments": [entry.path.name for entry in selected],
+        "previous_release": previous_release,
+        "preview": render(selected, released=True),
+        "prefix": prefix,
+        "selected": True,
+        "selection_digest": selection_digest_for_entries(component, prefix, selected),
+        "version": resolved,
+    }
 
 
 def release(
@@ -889,7 +1006,14 @@ def release(
 
 
 def changed_paths(repo_root: Path, base: str, head: str) -> set[str]:
-    output = git(repo_root, "diff", "--find-renames", "--name-only", f"{base}...{head}")
+    output = git(
+        repo_root,
+        "diff",
+        "--find-renames",
+        "--name-only",
+        "--end-of-options",
+        f"{base}...{head}",
+    )
     return {line for line in output.splitlines() if line}
 
 
@@ -1091,7 +1215,7 @@ def authorize_pre_contract_migration(
     require_complete_tag_visibility(repo_root)
     if source_exists_in_any_tag(repo_root, permit.source):
         raise ChangelogError("pre-contract migration cannot move a snapshot present in a tag")
-    return {permit.source}
+    return {permit.source, permit.destination}
 
 
 def validate_permit_update(repo_root: Path, base: str, head: str) -> None:
@@ -1105,14 +1229,39 @@ def validate_permit_update(repo_root: Path, base: str, head: str) -> None:
         raise ChangelogError("pre-contract migration permit is append-only")
 
 
+# `Dockerfile.<x>` is a Dockerfile variant only when `<x>` names a variant.
+# These suffixes name a different kind of file that merely sits beside one:
+# prose and editor droppings, and the build-context exclusion lists — a
+# `Dockerfile.dockerignore` pins no dependency version and must not force a
+# fragment on its own. Reproduced in `Verjson/verjson-ci` on a real file.
+NON_DEPENDENCY_SIBLING_SUFFIXES = frozenset(
+    {
+        ".adoc",
+        ".backup",
+        ".bak",
+        ".containerignore",
+        ".dockerignore",
+        ".gitignore",
+        ".ignore",
+        ".markdown",
+        ".md",
+        ".npmignore",
+        ".old",
+        ".orig",
+        ".rst",
+        ".save",
+        ".swp",
+        ".tmp",
+        ".txt",
+    }
+)
+
+
 def is_dependency_file(path: str) -> bool:
     filename = Path(path).name
     if re.fullmatch(r"(?:docker-compose|compose)(?:\.[A-Za-z0-9_-]+)*\.ya?ml", filename):
         return True
-    if Path(filename).suffix.lower() not in {
-        ".md", ".markdown", ".rst", ".adoc", ".txt", ".bak", ".backup",
-        ".old", ".orig", ".save", ".swp", ".tmp",
-    } and re.fullmatch(
+    if Path(filename).suffix.lower() not in NON_DEPENDENCY_SIBLING_SUFFIXES and re.fullmatch(
         r"(?:(?:Dockerfile|Containerfile)(?:\.[A-Za-z0-9_-]+)*|"
         r"[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*\.(?:Dockerfile|Containerfile))",
         filename,
@@ -1123,14 +1272,136 @@ def is_dependency_file(path: str) -> bool:
     )
 
 
+# Everything the running log is meant to describe, minus an explicit exemption
+# list. An allow-list of "production" directories cannot be kept current across
+# every adopter shape, so the rule is keyed on the file being source code and
+# each exemption is named here rather than inferred.
+PRODUCTION_SOURCE_SUFFIXES = frozenset(
+    {
+        ".bash",
+        ".c",
+        ".cjs",
+        ".cpp",
+        ".cs",
+        ".cts",
+        ".go",
+        ".h",
+        ".java",
+        ".js",
+        ".jsx",
+        ".kt",
+        ".mjs",
+        ".mts",
+        ".php",
+        ".ps1",
+        ".psm1",
+        ".py",
+        ".rb",
+        ".rs",
+        ".sh",
+        ".sql",
+        ".svelte",
+        ".swift",
+        ".tf",
+        ".ts",
+        ".tsx",
+        ".vue",
+    }
+)
+
+# Exempt from the production-source classifier because they are either changelog
+# stores, documentation, or tests. Documentation is still release-relevant and
+# is enforced by `is_release_relevant_change`; tests remain the only content
+# exemption because their change is described by the source change they cover.
+EXEMPT_SOURCE_PREFIXES = ("CHANGELOG/", "docs/", f"{UNRELEASED_DIR}/")
+# A test root is anchored rather than matched at any depth. `tests`, `test`, and
+# `spec` are ordinary words: `packages/api/spec/` is a package's own tree far
+# more often than a test tree, and exempting it at any depth hid whole source
+# subtrees from the running log. `__tests__/` and `__mocks__/` carry no such
+# ambiguity, so they stay depth-free.
+TEST_ROOT = re.compile(
+    r"^(?:[^/]+/){0,2}tests?/"
+    r"|^spec/"
+    r"|(?:^|/)(?:__tests__|__mocks__)/"
+)
+# Self-identifying filenames: the marker sits against the extension, so
+# `adapter.test.ts` cannot plausibly be production code wherever it lives. A
+# bare `test_` prefix is not self-identifying — `tools/test_runner.py` is
+# production tooling — so it exempts only by sitting under a test root above.
+TEST_FILENAME = re.compile(
+    r"(?:^|/)[^/]*[._-]test\.[A-Za-z0-9]+$"
+    r"|(?:^|/)[^/]*[._-]spec\.[A-Za-z0-9]+$"
+)
+
+RELEASE_LOG_EXEMPT_PATHS = frozenset({"CHANGELOG.md"})
+RELEASE_LOG_EXEMPT_PREFIXES = ("CHANGELOG/", f"{UNRELEASED_DIR}/")
+GITHUB_WORKFLOW_DEFINITION = re.compile(r"^\.github/workflows/[^/]+\.ya?ml$")
+LOCAL_ACTION_METADATA = frozenset({"action.yml", "action.yaml"})
+
+
+def is_test_source(path: str) -> bool:
+    return bool(TEST_ROOT.search(path) or TEST_FILENAME.search(path))
+
+
+def is_production_source(path: str) -> bool:
+    if path.startswith(EXEMPT_SOURCE_PREFIXES) or is_test_source(path):
+        return False
+    return Path(path).suffix.lower() in PRODUCTION_SOURCE_SUFFIXES
+
+
+def is_release_relevant_change(path: str) -> bool:
+    """Whether a changed path needs release context in a new fragment.
+
+    The running log covers behavior, configuration, code, documentation, and
+    pins. New repository shapes therefore fail closed by default. Only the
+    changelog stores and explicitly classified test-only paths are exempt.
+    """
+    if (
+        GITHUB_WORKFLOW_DEFINITION.fullmatch(path)
+        or Path(path).name in LOCAL_ACTION_METADATA
+    ):
+        return True
+    if path in RELEASE_LOG_EXEMPT_PATHS or path.startswith(
+        RELEASE_LOG_EXEMPT_PREFIXES
+    ):
+        return False
+    return not is_test_source(path)
+
+
 def is_fragment_path(path: str) -> bool:
     return path.startswith(f"{UNRELEASED_DIR}/") and path != f"{UNRELEASED_DIR}/README.md"
 
 
+def valid_added_fragments(repo_root: Path, added_fragments: set[str]) -> set[str]:
+    canonical = {
+        str(entry.path.relative_to(repo_root))
+        for entry in fragments(repo_root)
+        if entry.canonical
+    }
+    return added_fragments & canonical
+
+
+def require_valid_added_fragments(
+    repo_root: Path, added_fragments: set[str], message: str
+) -> None:
+    invalid_added = added_fragments - valid_added_fragments(repo_root, added_fragments)
+    if invalid_added:
+        raise ChangelogError(
+            f"{message}; invalid additions: " + ", ".join(sorted(invalid_added))
+        )
+
+
 def check_pr(repo_root: Path, base: str, head: str) -> None:
+    require_revision("--base", base)
+    require_revision("--head", head)
     status_by_path = {}
     for line in git(
-        repo_root, "diff", "--no-renames", "--name-status", f"{base}...{head}"
+        repo_root,
+        "diff",
+        "--no-renames",
+        "--name-status",
+        "--end-of-options",
+        f"{base}...{head}",
     ).splitlines():
         status, path = line.split("\t", 1)
         status_by_path[path] = status
@@ -1158,6 +1429,7 @@ def check_pr(repo_root: Path, base: str, head: str) -> None:
         "diff",
         "--find-renames",
         "--name-status",
+        "--end-of-options",
         f"{base}...{head}",
     ).splitlines():
         fields = line.split("\t")
@@ -1192,18 +1464,43 @@ def check_pr(repo_root: Path, base: str, head: str) -> None:
             + ", ".join(dependencies)
         )
     if dependencies:
-        valid_fragments = {
-            str(entry.path.relative_to(repo_root))
-            for entry in fragments(repo_root)
-            if entry.canonical
-        }
-        invalid_added = added_fragments - valid_fragments
-        if invalid_added:
-            raise ChangelogError(
-                "dependency manifests or lockfiles require a new valid NEXT fragment; "
-                "invalid additions: "
-                + ", ".join(sorted(invalid_added))
-            )
+        require_valid_added_fragments(
+            repo_root,
+            added_fragments,
+            "dependency manifests or lockfiles require a new valid NEXT fragment",
+        )
+    production = sorted(path for path in changed if is_production_source(path))
+    if production and not added_fragments:
+        raise ChangelogError(
+            "production source changes require a new NEXT fragment: "
+            + ", ".join(production)
+        )
+    if production:
+        require_valid_added_fragments(
+            repo_root,
+            added_fragments,
+            "production source changes require a new valid NEXT fragment",
+        )
+    release_relevant = sorted(
+        path
+        for path in changed
+        if is_release_relevant_change(path)
+        and path not in permitted
+        and not is_dependency_file(path)
+        and not is_production_source(path)
+    )
+    if release_relevant and not added_fragments:
+        raise ChangelogError(
+            "release-relevant changes require a new NEXT fragment "
+            "(all paths except changelog stores and test-only files): "
+            + ", ".join(release_relevant)
+        )
+    if release_relevant:
+        require_valid_added_fragments(
+            repo_root,
+            added_fragments,
+            "release-relevant changes require a new valid NEXT fragment",
+        )
 
 
 def parser() -> argparse.ArgumentParser:
@@ -1273,6 +1570,23 @@ def parser() -> argparse.ArgumentParser:
         default="v",
         help="select the version history prefix; defaults to v",
     )
+    plan_parser = subparsers.add_parser(
+        "release-plan",
+        help="resolve and validate one release without changing the repository",
+        description=(
+            "Resolve the selected fragments, version, bump rationale, and release "
+            "preview without changing the repository."
+        ),
+    )
+    plan_parser.add_argument("--repo-root", type=Path, default=Path.cwd())
+    plan_parser.add_argument(
+        "--version",
+        default="",
+        help="explicit release tag; omit to derive it from the selected fragments",
+    )
+    plan_parser.add_argument("--fragment", action="append", default=[])
+    plan_parser.add_argument("--component")
+    plan_parser.add_argument("--prefix", default="v")
     digest_parser = subparsers.add_parser(
         "selection-digest",
         help="print a canonical digest for one release selection",
@@ -1297,11 +1611,19 @@ def main() -> int:
             grace_active = impact_migration_window_active(
                 args.allow_missing_impact_through
             )
-            if args.allow_missing_impact_through and not args.base:
+            # `--head` is checked whether or not `--base` was given: it is
+            # unused while `--base` is None, but a caller who passed a lost
+            # variable should hear that now rather than the next time the
+            # surrounding condition changes.
+            if args.head is not None:
+                require_revision("--head", args.head)
+            if args.base is not None:
+                require_revision("--base", args.base)
+            if args.allow_missing_impact_through and args.base is None:
                 raise ChangelogError(
                     "--allow-missing-impact-through requires --base"
                 )
-            if args.base and not grace_active:
+            if args.base is not None and not grace_active:
                 validate_new_fragment_impacts(
                     repo_root,
                     args.base,
@@ -1332,6 +1654,19 @@ def main() -> int:
                     args.fragment,
                     component=args.component,
                     prefix=args.prefix,
+                )
+            )
+        elif args.command == "release-plan":
+            print(
+                json.dumps(
+                    release_plan(
+                        repo_root,
+                        args.version,
+                        args.fragment,
+                        component=args.component,
+                        prefix=args.prefix,
+                    ),
+                    sort_keys=True,
                 )
             )
         elif args.command == "selection-digest":

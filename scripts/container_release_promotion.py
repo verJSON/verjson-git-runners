@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 
 import argparse
+from datetime import datetime, timezone
 import json
 import re
 import sys
 from pathlib import Path
 
-from container_release_manifest import ManifestError, validate_manifest
+# Workflows start this script with `python3 -I`, which leaves its own directory
+# off the module path; the sibling it imports lives there.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from container_release_manifest import ManifestError, validate_manifest  # noqa: E402
 
 
 SEMVER = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
@@ -19,8 +23,29 @@ def load(path: Path) -> dict:
     return value
 
 
-def release(candidate: dict, config: dict, state: dict, version: str) -> dict:
+def release(
+    candidate: dict, config: dict, state: dict, version: str,
+    now: datetime | None = None,
+) -> dict:
     validate_manifest(candidate, config)
+    current_time = now or datetime.now(timezone.utc)
+    if current_time.tzinfo is None or current_time.utcoffset() is None:
+        raise ManifestError("release check time must be timezone-aware")
+    current_time = current_time.astimezone(timezone.utc)
+    for image in candidate["images"]:
+        canonical = next(
+            (item for item in image["destinations"] if item["provider"] == "ghcr"),
+            None,
+        )
+        if canonical is None:
+            raise ManifestError("candidate has no canonical GHCR source")
+        expires_at = datetime.fromisoformat(
+            canonical["candidateExpiresAt"].replace("Z", "+00:00")
+        )
+        if current_time >= expires_at:
+            raise ManifestError(
+                "candidate GHCR digest has expired; rebuilding or substituting is forbidden"
+            )
     if not SEMVER.fullmatch(version) or version != config.get("nextStableVersion"):
         raise ManifestError("release version must be the reviewed next stable SemVer")
     if state.get("gitTag") or state.get("changelogSnapshot") or state.get("githubRelease"):
@@ -64,15 +89,36 @@ def release(candidate: dict, config: dict, state: dict, version: str) -> dict:
         images.append({
             "variant": image["variant"], "repository": repository,
             "indexDigest": digest, "platforms": image["platforms"],
+            "destinations": [
+                {
+                    key: receipt[key]
+                    for key in (
+                        "provider",
+                        "repository",
+                        "digest",
+                        "candidateExpiresAt",
+                        "verifiedAt",
+                    )
+                }
+                for receipt in image["destinations"]
+            ],
             "provenance": {"predicateType": image["provenance"]["predicateType"], "attestationDigest": attestation_digest, "builderIdentity": image["provenance"]["builderIdentity"]},
             "sbom": {"predicateType": image["sbom"]["predicateType"], "attestationDigest": sbom_digest},
         })
-    workflow, contract = candidate["source"]["workflow"].rsplit("@", 1)
+    # Split on the first `@`: a signer such as `...yml@refs/heads/main@<sha>` must
+    # not pass as pinned because its last segment happens to be a commit.
+    workflow, _, contract = candidate["source"]["workflow"].partition("@")
     path_prefix = "Verjson/.github/"
     if not workflow.startswith(path_prefix):
         raise ManifestError("candidate workflow is outside the contract repository")
+    if workflow != path_prefix + ".github/workflows/container-candidate-publish.yml":
+        raise ManifestError("candidate workflow is not the contract publisher")
+    # Only a pinned contract commit is promotable; a branch-named publisher (the
+    # same-repository contract canary) is never released (ADR 0216).
+    if not re.fullmatch(r"[0-9a-f]{40}", contract):
+        raise ManifestError("candidate publisher is not pinned to a contract commit")
     return {
-        "schemaVersion": 2,
+        "schemaVersion": 3,
         "releaseVersion": version,
         "candidateVersion": candidate["candidateVersion"],
         "candidateManifestDigest": candidate_digest,
