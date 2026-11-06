@@ -14,7 +14,7 @@ def contract():
     result = {'registry': 'nexus.example.org', 'namespace': 'gitlab-jobs', 'architecture': 'amd64'}
     for index, (role, path) in enumerate((('build', 'ghcr.io/verjson/gha-runner-node'), ('manager', 'registry.gitlab.com/gitlab-org/gitlab-runner'), ('helper', 'registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper')), 1):
         digest = 'sha256:' + str(index) * 64
-        result[role] = {'source': path + '@' + digest, 'destination': 'nexus.example.org/' + role + '@' + digest, 'version': '18.3.1'}
+        result[role] = {'source': path + '@' + digest, 'destination': 'nexus.example.org/' + role + '@' + digest, 'version': '19.5.2'}
     return result
 
 

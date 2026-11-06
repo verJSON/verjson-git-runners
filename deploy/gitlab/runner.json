@@ -322,7 +322,7 @@
             ],
             "initContainers": [
               {
-                "image": "docker.nexus.159-195-78-163.nip.io/verjson/gitlab-runner/manager@sha256:07f924e39aefc1f4ce49e2d7e83b31dedd1a8f07a172b2fe3a9175072bd9d92b",
+                "image": "docker.nexus.159-195-78-163.nip.io/verjson/gitlab-runner/manager@sha256:800157105b792ed3f0c9bc0aa6bc6427d66889cafd2c8aae4c4c177194699144",
                 "imagePullPolicy": "Always",
                 "securityContext": {
                   "allowPrivilegeEscalation": false,
@@ -364,7 +364,7 @@
             ],
             "containers": [
               {
-                "image": "docker.nexus.159-195-78-163.nip.io/verjson/gitlab-runner/manager@sha256:07f924e39aefc1f4ce49e2d7e83b31dedd1a8f07a172b2fe3a9175072bd9d92b",
+                "image": "docker.nexus.159-195-78-163.nip.io/verjson/gitlab-runner/manager@sha256:800157105b792ed3f0c9bc0aa6bc6427d66889cafd2c8aae4c4c177194699144",
                 "imagePullPolicy": "Always",
                 "securityContext": {
                   "allowPrivilegeEscalation": false,

@@ -1,0 +1,65 @@
+{
+  "runnerVersion": "19.5.2",
+  "runnerRevision": "66ad5002d9249fc178e8f9edf3dd7d58223213ce",
+  "managerImageIndex": "sha256:800157105b792ed3f0c9bc0aa6bc6427d66889cafd2c8aae4c4c177194699144",
+  "helperImageIndex": "sha256:072376a64c654169ef9de96b4b40740c10f1ef1a69f913644f56b25d1d894401",
+  "liveObservation": true,
+  "syntheticOnly": false,
+  "observedAt": "2026-11-06T02:13:27Z",
+  "method": "Kubernetes watch of Secrets and Pods in the canary namespace while the GitLab project-1 protected-main pipeline 12 ran on runner 1. Order is the resourceVersion of each object's ADDED event. Kubernetes documents resourceVersion as opaque, but it increases monotonically on this etcd-backed k3s cluster. Image digests come from Pod containerStatuses imageIDs. No credential values were read.",
+  "nodeRegistriesYamlPresent": false,
+  "pullPolicy": "Always",
+  "results": [
+    {
+      "job": 24,
+      "jobName": "verjson-producer-test",
+      "buildImageDigest": "sha256:140fe6ddf820c71f113ead4038e684b2e72b1f5aab7b7184354173f9231a9703",
+      "secretResourceVersion": 2557532,
+      "podResourceVersion": 2557535,
+      "podReferencesOnlyJobSecret": true,
+      "secretType": "kubernetes.io/dockercfg",
+      "createdSecretBeforePod": true,
+      "serviceAccount": "default",
+      "automountServiceAccountToken": false,
+      "podSeccompProfile": "RuntimeDefault",
+      "containerHOME": {
+        "build": "/tmp",
+        "helper": "/tmp"
+      },
+      "helperImageDigest": "sha256:072376a64c654169ef9de96b4b40740c10f1ef1a69f913644f56b25d1d894401",
+      "jobStatus": "success",
+      "imageIdSource": "containerStatuses"
+    },
+    {
+      "job": 25,
+      "jobName": "verjson-producer-validate",
+      "buildImageDigest": "sha256:54e92d422b81818eca7ce5ed20f1b68be01873b9201eb00d174f36207c844722",
+      "secretResourceVersion": 2557577,
+      "podResourceVersion": 2557580,
+      "podReferencesOnlyJobSecret": true,
+      "secretType": "kubernetes.io/dockercfg",
+      "createdSecretBeforePod": true,
+      "serviceAccount": "default",
+      "automountServiceAccountToken": false,
+      "podSeccompProfile": "RuntimeDefault",
+      "containerHOME": {
+        "build": "/tmp",
+        "helper": "/tmp"
+      },
+      "helperImageDigest": "sha256:072376a64c654169ef9de96b4b40740c10f1ef1a69f913644f56b25d1d894401",
+      "jobStatus": "success",
+      "imageIdSource": "containerStatuses"
+    }
+  ],
+  "notReverifiedOn19.5.2": [
+    "raw-variable negative control (unexpanded token cannot authenticate)",
+    "use_service_account_image_pull_secrets=true suppression control",
+    "expired-token and wrong-reference denial"
+  ],
+  "sourceReferences": [
+    "https://gitlab.com/gitlab-org/gitlab-runner/-/blob/v19.5.2/executors/kubernetes/kubernetes.go#L1241",
+    "https://gitlab.com/gitlab-org/gitlab-runner/-/blob/v19.5.2/executors/kubernetes/kubernetes.go#L2687",
+    "https://gitlab.com/gitlab-org/gitlab-runner/-/blob/v19.5.2/common/build_settings.go#L183",
+    "https://gitlab.com/gitlab-org/gitlab-runner/-/blob/v19.5.2/common/spec/variables.go#L164"
+  ]
+}
