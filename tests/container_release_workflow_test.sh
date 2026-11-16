@@ -9,7 +9,7 @@ release="${root}/.github/workflows/container-release.yml"
 candidate_validator="${root}/scripts/container_candidate_validate.py"
 manifest_validator="${root}/scripts/container_release_manifest.py"
 candidate_contract_ref="19b94586a564c0276e967cf2fd8633bc0f02a53f"
-release_contract_ref="635aca975b1aa93660138875ba9616b27693476f"
+release_contract_ref="19b94586a564c0276e967cf2fd8633bc0f02a53f"
 changelog_sha256="94c8ce0ee488ffd7a65896b46a0e9ac0d681d2d8a86655c45af99ed2d4847f5e"
 release_manifest="$(find "${root}/RELEASES/containers" -maxdepth 1 -type f -name 'v*.json' -print | sort -V | tail -n 1)"
 [[ -n "${release_manifest}" ]] || {
