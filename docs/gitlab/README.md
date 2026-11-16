@@ -10,6 +10,9 @@ Generate a credential-free configuration with Python 3.11 or later:
 ```sh
 python3 scripts/gitlab_build_config.py publication-contract.json > config.template.toml
 python3 tests/gitlab_build_config_test.py
+bash tests/gitlab_build_config_isolation_test.sh
+bash tests/gitlab_build_image_isolation_contract_test.sh
+# Opt-in synthetic local/GHCR image probe (pre-pull the digest; never Netcup/Nexus live):
 bash tests/gitlab_build_image_test.sh ghcr.io/verjson/gha-runner@sha256:<verified-digest>
 ```
 
@@ -42,12 +45,27 @@ runner registration, Docker socket or host work directory belongs in the GitLab 
 
 The generated template runs one job at a time, pins the only allowed build image,
 restricts pulls to `always`, drops all Linux capabilities, disables privilege escalation,
-and runs UID/GID 1001 (observed in released base 0.2.1; revalidate each selected variant) with group-writable ephemeral volumes. The image's passwordless
+emits `allowed_docker_credential_helpers = []` so a job `DOCKER_AUTH_CONFIG` cannot run
+credential helpers, and runs UID/GID 1001 (observed in released base 0.2.1; revalidate
+each selected variant) with group-writable ephemeral volumes. The image's passwordless
 sudo is consequently unavailable. Build and helper CPU, memory and ephemeral storage
 have finite limits. Namespace/account/bearer overrides and job service-account token
 mounting are disabled. Services use a nonmatching reserved `.invalid` image allowlist:
 an empty allowlist would allow arbitrary services. Jobs needing service containers are
 outside this initial contract and require separately reviewed digest-pinned allowances.
+
+### Synthetic build-image isolation probe
+
+`tests/gitlab_build_image_test.sh` is a **local/GHCR-only** behavior check against an
+already-pulled `ghcr.io/verjson/gha-runner*` digest. It asserts UID 1001, no
+`/var/run/docker.sock`, no passwordless sudo, no GitHub listener, and an executable
+`/usr/bin/bwrap`. It then exercises a real Bubblewrap user-namespace sandbox
+(`--unshare-user --unshare-pid … /bin/true`). Under Docker's default seccomp profile
+that probe is often denied; the script retries once with `seccomp=unconfined` while
+keeping non-root, `cap-drop ALL`, `no-new-privileges`, and no socket. If nested CI or
+the host kernel still denies userns, the script prints a skip and exits 0 unless
+`VERJSON_GITLAB_BUILD_IMAGE_REQUIRE_USERNS=1` is set (fail closed). This synthetic
+path is **not** live Netcup/Nexus or protected-main WEB acceptance for #208.
 
 The deployment owner must add GitLab URL and the approved runner authentication secret
 through its secret-management path, configure separate least-privilege manager RBAC,

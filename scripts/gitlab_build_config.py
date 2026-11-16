@@ -115,6 +115,8 @@ concurrent = 1
     allowed_pull_policies = ["always"]
     image_pull_secrets = []
     use_service_account_image_pull_secrets = false
+    # Deny DOCKER_AUTH_CONFIG credential helpers (Runner 19.5.2+); jobs use inline auth only.
+    allowed_docker_credential_helpers = []
     enable_service_links = false
     privileged = false
     allow_privilege_escalation = false
