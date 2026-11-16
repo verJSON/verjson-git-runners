@@ -3,7 +3,7 @@ module git.159-195-78-163.nip.io/Verjson/verjson-git-runners/app
 go 1.26.6
 
 require (
-	charm.land/bubbletea/v2 v2.1.0
+	charm.land/bubbletea/v2 v2.1.1
 	charm.land/huh/v2 v2.0.3
 	charm.land/lipgloss/v2 v2.1.1
 )
