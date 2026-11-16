@@ -43,4 +43,4 @@ jobs:
         run: |
           printf 'runner=%s labels=%s\n' "${RUNNER_NAME:-unknown}" "${RUNNER_LABELS:-unset}"
       - name: Delivered lane image satisfies the Bubblewrap contract
-        run: python3 scripts/bubblewrap-image-contract.py
+        run: python3 scripts/bubblewrap-image-contract.py --require-user-namespace

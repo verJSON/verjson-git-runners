@@ -339,7 +339,7 @@ class BubblewrapBehaviorTest(unittest.TestCase):
     def test_accepts_working_user_namespace_sandbox(self) -> None:
         marker = self.root / "userns-exercised"
         self.write_bwrap_userns_probe(marker=marker)
-        self.verify()
+        self.verify(require_user_namespace=True)
         self.assertTrue(
             marker.exists(),
             "user-namespace sandbox probe was not exercised",
@@ -351,7 +351,27 @@ class BubblewrapBehaviorTest(unittest.TestCase):
             CONTRACT.ContractError,
             r"user namespace is denied by AppArmor or kernel uid-map policy",
         ):
-            self.verify()
+            self.verify(require_user_namespace=True)
+
+    def test_image_finalize_accepts_userns_denial_without_require(self) -> None:
+        """Image-build finalize proves packaging/--version only; nested BuildKit
+        cannot create userns, so denial must not block packaging when the
+        runtime require flag is omitted."""
+        marker = self.root / "userns-exercised"
+        self.write_bwrap_userns_probe(marker=marker, deny=True)
+        self.verify()
+        self.assertFalse(
+            marker.exists(),
+            "user-namespace probe must not run on the packaging path",
+        )
+
+    def test_cli_defaults_to_packaging_without_userns_require(self) -> None:
+        args = CONTRACT._parse_args([])
+        self.assertFalse(args.require_user_namespace)
+
+    def test_cli_opt_in_requires_user_namespace(self) -> None:
+        args = CONTRACT._parse_args(["--require-user-namespace"])
+        self.assertTrue(args.require_user_namespace)
 
     def test_rejects_missing_binary(self) -> None:
         (self.bin / "bwrap").unlink()

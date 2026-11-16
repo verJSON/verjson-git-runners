@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 from __future__ import annotations
 
+import argparse
 import hashlib
 import io
 import json
@@ -312,11 +313,32 @@ def _probe_user_namespace(bubblewrap_fd: int) -> None:
     )
 
 
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Verify the Bubblewrap package identity and --version floor. "
+            "Pass --require-user-namespace on host runners and lane "
+            "conformance so AppArmor/uid-map denial fails closed. Image-build "
+            "finalize omits that flag: nested BuildKit cannot create userns."
+        )
+    )
+    parser.add_argument(
+        "--require-user-namespace",
+        action="store_true",
+        help=(
+            "Fail closed when Bubblewrap cannot create a user namespace "
+            "(lane / host runners). Omit during image-build finalize."
+        ),
+    )
+    return parser.parse_args(argv)
+
+
 def verify_bubblewrap(
     root: Path = Path("/"),
     *,
     owner: int = 0,
     before_execute: Callable[[], None] | None = None,
+    require_user_namespace: bool = False,
 ) -> None:
     def identity(metadata: os.stat_result) -> tuple[int, ...]:
         return (
@@ -408,7 +430,8 @@ def verify_bubblewrap(
         if tuple(map(int, match.groups())) < MINIMUM_VERSION:
             raise ContractError("/usr/bin/bwrap is older than 0.9.0")
 
-        _probe_user_namespace(bubblewrap_fd)
+        if require_user_namespace:
+            _probe_user_namespace(bubblewrap_fd)
 
         usr_after_fd = _trusted_directory(root_fd, "usr", "/usr", owner)
         descriptors.append(usr_after_fd)
@@ -473,6 +496,7 @@ def verify_bubblewrap(
 
 if __name__ == "__main__":
     try:
-        verify_bubblewrap()
+        args = _parse_args()
+        verify_bubblewrap(require_user_namespace=args.require_user_namespace)
     except ContractError as error:
         raise SystemExit(f"bubblewrap image contract: {error}") from None
