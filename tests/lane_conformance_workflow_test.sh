@@ -26,17 +26,18 @@ bubblewrap_job="$(awk '
 ' "${workflow}")"
 [[ -n "${bubblewrap_job}" ]] || fail "bubblewrap job not found"
 
-# Image builds prove the image they build satisfies the contract. This probe must
-# run the same checker in the active bubblewrap job on the delivered lane.
+# Image builds prove packaging/--version only (nested BuildKit cannot create
+# userns). This probe must run the same checker with the runtime require flag
+# so AppArmor/uid-map denial fails closed on the delivered lane.
 probe_run="$(awk '
-  /^[[:space:]]+run:[[:space:]]*python3 scripts\/bubblewrap-image-contract\.py[[:space:]]*$/ {
+  /^[[:space:]]+run:[[:space:]]*python3 scripts\/bubblewrap-image-contract\.py[[:space:]]+--require-user-namespace[[:space:]]*$/ {
     sub(/^[[:space:]]+run:[[:space:]]*/, "")
     print
     exit
   }
 ' <<<"${bubblewrap_job}")"
-[[ "${probe_run}" == 'python3 scripts/bubblewrap-image-contract.py' ]] \
-  || fail "the bubblewrap job does not run the shared image contract"
+[[ "${probe_run}" == 'python3 scripts/bubblewrap-image-contract.py --require-user-namespace' ]] \
+  || fail "the bubblewrap job does not run the shared image contract with --require-user-namespace"
 
 dispatch_trigger="$(awk '
   /^[[:space:]]*on:[[:space:]]*$/ { in_triggers = 1; next }
@@ -109,10 +110,10 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-      - run: python3 scripts/bubblewrap-image-contract.py
+      - run: python3 scripts/bubblewrap-image-contract.py --require-user-namespace
 EOF
 if "${BASH_SOURCE[0]}" "${fixture_dir}/sibling-only.yml" >"${fixture_dir}/result" 2>&1; then
   fail "a sibling job satisfied the bubblewrap probe contract"
 fi
-grep -Fq "the bubblewrap job does not run the shared image contract" "${fixture_dir}/result" \
+grep -Fq "the bubblewrap job does not run the shared image contract with --require-user-namespace" "${fixture_dir}/result" \
   || fail "the sibling-job control failed for an unexpected reason"

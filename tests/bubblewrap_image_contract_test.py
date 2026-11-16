@@ -172,6 +172,45 @@ class BubblewrapBehaviorTest(unittest.TestCase):
         target.chmod(0o755)
         return target
 
+    def write_bwrap_userns_probe(
+        self,
+        *,
+        version: str = "0.9.0",
+        marker: Path | None = None,
+        deny: bool = False,
+    ) -> Path:
+        """Fake bwrap that handles --version and the user-namespace sandbox probe."""
+        marker_path = marker or (self.root / "userns-exercised")
+        deny_block = (
+            "printf '%s\\n' "
+            "'bwrap: Failed to write to uid_map: Permission denied' >&2\n"
+            "exit 1\n"
+            if deny
+            else "touch \"$MARKER\"\nexit 0\n"
+        )
+        script = (
+            "#!/bin/sh\n"
+            f"MARKER='{marker_path}'\n"
+            'if [ "$1" = "--version" ]; then\n'
+            f"  printf 'bubblewrap {version}\\n'\n"
+            "  exit 0\n"
+            "fi\n"
+            'case " $* " in\n'
+            '  *" --unshare-user "*)\n'
+            f"{deny_block}"
+            "    ;;\n"
+            "esac\n"
+            "printf 'unexpected bwrap invocation\\n' >&2\n"
+            "exit 1\n"
+        )
+        target = self.bin / "bwrap"
+        target.write_text(script, encoding="utf-8")
+        target.chmod(0o755)
+        self.refresh_package_hash()
+        self.write_package_archive()
+        self.write_provenance()
+        return target
+
     def write_package_metadata(self) -> None:
         package_root = self.root / "var" / "lib" / "dpkg"
         info = package_root / "info"
@@ -296,6 +335,43 @@ class BubblewrapBehaviorTest(unittest.TestCase):
 
     def test_accepts_exact_minimum_version(self) -> None:
         self.verify()
+
+    def test_accepts_working_user_namespace_sandbox(self) -> None:
+        marker = self.root / "userns-exercised"
+        self.write_bwrap_userns_probe(marker=marker)
+        self.verify(require_user_namespace=True)
+        self.assertTrue(
+            marker.exists(),
+            "user-namespace sandbox probe was not exercised",
+        )
+
+    def test_rejects_user_namespace_denied_by_apparmor(self) -> None:
+        self.write_bwrap_userns_probe(deny=True)
+        with self.assertRaisesRegex(
+            CONTRACT.ContractError,
+            r"user namespace is denied by AppArmor or kernel uid-map policy",
+        ):
+            self.verify(require_user_namespace=True)
+
+    def test_image_finalize_accepts_userns_denial_without_require(self) -> None:
+        """Image-build finalize proves packaging/--version only; nested BuildKit
+        cannot create userns, so denial must not block packaging when the
+        runtime require flag is omitted."""
+        marker = self.root / "userns-exercised"
+        self.write_bwrap_userns_probe(marker=marker, deny=True)
+        self.verify()
+        self.assertFalse(
+            marker.exists(),
+            "user-namespace probe must not run on the packaging path",
+        )
+
+    def test_cli_defaults_to_packaging_without_userns_require(self) -> None:
+        args = CONTRACT._parse_args([])
+        self.assertFalse(args.require_user_namespace)
+
+    def test_cli_opt_in_requires_user_namespace(self) -> None:
+        args = CONTRACT._parse_args(["--require-user-namespace"])
+        self.assertTrue(args.require_user_namespace)
 
     def test_rejects_missing_binary(self) -> None:
         (self.bin / "bwrap").unlink()

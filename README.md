@@ -93,6 +93,9 @@ release manifest. Automation consumes that signed manifest's digests, never muta
 
 Host provisioning (your box, GCP, or DigitalOcean) is decoupled from the runner
 artifact (this image), so every path can stay in lockstep on one runner definition.
+Fleet hosts must install `linux-generic-hwe-24.04` (or otherwise guarantee Linux
+6.9+) so `PIDFD_SIGNAL_PROCESS_GROUP` is available; a stock Ubuntu 24.04 kernel
+(6.8) is below that floor.
 
 ### The `ci` runner contract
 
