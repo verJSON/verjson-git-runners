@@ -23,6 +23,25 @@ BUBBLEWRAP_PROVENANCE_NAME = Path(BUBBLEWRAP_PROVENANCE_PATH).name
 BUBBLEWRAP_PACKAGE_ARCHIVE_NAME = "verjson-bubblewrap.deb"
 BUBBLEWRAP_PACKAGE_ANCHOR_PATH = "/etc/verjson-bubblewrap-apt-sha256.json"
 BUBBLEWRAP_PACKAGE_ANCHOR_NAME = Path(BUBBLEWRAP_PACKAGE_ANCHOR_PATH).name
+# Minimal real sandbox: --version creates no namespaces, so AppArmor/uid-map denial
+# on Ubuntu 24.04 would otherwise pass this contract while every job sandbox fails.
+USER_NAMESPACE_PROBE = (
+    "--unshare-user",
+    "--unshare-pid",
+    "--die-with-parent",
+    "--ro-bind",
+    "/",
+    "/",
+    "--proc",
+    "/proc",
+    "--",
+    "/bin/true",
+)
+USERNS_DENIED_PATTERN = re.compile(
+    r"(uid[_ ]?map|unprivileged user namespaces|apparmor|operation not permitted|"
+    r"permission denied|creating new namespace)",
+    re.IGNORECASE,
+)
 
 
 class ContractError(RuntimeError):
@@ -271,6 +290,28 @@ def _verify_bubblewrap_package(
         raise ContractError("/usr/bin/bwrap has an unexpected package mode")
 
 
+def _probe_user_namespace(bubblewrap_fd: int) -> None:
+    result = subprocess.run(
+        [f"/proc/self/fd/{bubblewrap_fd}", *USER_NAMESPACE_PROBE],
+        pass_fds=(bubblewrap_fd,),
+        check=False,
+        capture_output=True,
+        text=True,
+        env={"LC_ALL": "C"},
+    )
+    if result.returncode == 0:
+        return
+    detail = (result.stderr or result.stdout or "").strip()
+    if USERNS_DENIED_PATTERN.search(detail):
+        raise ContractError(
+            "Bubblewrap user namespace is denied by AppArmor or kernel uid-map policy"
+        )
+    raise ContractError(
+        "Bubblewrap user-namespace sandbox failed"
+        + (f": {detail}" if detail else f" with exit {result.returncode}")
+    )
+
+
 def verify_bubblewrap(
     root: Path = Path("/"),
     *,
@@ -366,6 +407,8 @@ def verify_bubblewrap(
             raise ContractError("/usr/bin/bwrap emitted an unsupported version string")
         if tuple(map(int, match.groups())) < MINIMUM_VERSION:
             raise ContractError("/usr/bin/bwrap is older than 0.9.0")
+
+        _probe_user_namespace(bubblewrap_fd)
 
         usr_after_fd = _trusted_directory(root_fd, "usr", "/usr", owner)
         descriptors.append(usr_after_fd)
