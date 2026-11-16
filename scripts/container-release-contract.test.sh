@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-ref='635aca975b1aa93660138875ba9616b27693476f'
+ref='19b94586a564c0276e967cf2fd8633bc0f02a53f'
 # Every refusal names itself, so an adopter never has to bisect this file to
 # find the unmet assertion. The reporting only adds diagnostics: the ERR trap
 # re-exits with the failing command's status, naming its line and command.
@@ -32,7 +32,7 @@ assert_absent() {
   [ "$search_status" -ne 0 ] || contract_fail "found what must be absent: $*"
   contract_fail "could not search (exit $search_status): $*"
 }
-assert_digest .github/workflows/container-release.yml '1c2861b1a0af7137478a0e70304ee02a9d863b171c5b5bb503976f9bec7b943e'
+assert_digest .github/workflows/container-release.yml '62b536a6573b9492c2a87bcc1c48a27ccbf047e523c7547ec470195bac7788a5'
 grep -Fq "container-release.yml@$ref" .github/workflows/container-release.yml
 grep -Fq "contract-ref: $ref" .github/workflows/container-release.yml
 grep -q "workflow_dispatch:" .github/workflows/container-release.yml
@@ -50,9 +50,9 @@ test -f scripts/container_registry_destinations.py
 test -f scripts/container_artifact_extract.py
 test -f scripts/container_attestation_verify.py
 test -f scripts/container_cosign_provenance.py
-assert_digest scripts/container_release_promotion.py 'c2fb4dff5071bd4bd7f91020b1c92833fbe5f42b94ee8ae60ff75300c8ac61f9'
-assert_digest scripts/container_release_manifest.py '059b8b740eb225d55b79e2f8cbebab2d4ac165a42dffc48af61f240934195fc4'
-assert_digest scripts/container_registry_destinations.py 'cf107fd14bf26ea1b1fff92af7630df0015d0e8c4a9a58108a8f2d97ce5c1e72'
+assert_digest scripts/container_release_promotion.py '06cc09627e6963ec48367584976f1b65957085e3dfd034a8013dcfa842432702'
+assert_digest scripts/container_release_manifest.py 'ca54cec6ed4869c4610cc33b2424d90efe98e0bff776cccdcca555a95548422d'
+assert_digest scripts/container_registry_destinations.py 'dac1b0a85e164b72325c306eff38525f895a71070a353f755c443ef10c51cf36'
 assert_digest scripts/container_artifact_extract.py '78c98d7880cec62022cfa79f3019c48b5d8a59f362738229cac29a8388ca7588'
 assert_digest scripts/container_attestation_verify.py '704e3d04d0a184515e7c3863d5b20e36ee22d61ac27055cf95381599c76c1abb'
 assert_digest scripts/container_cosign_provenance.py 'e785ad9fb49d60d0de25dd2214e2c03fbf7fa348a7df2407ee7f187757a91c74'
