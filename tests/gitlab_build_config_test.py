@@ -83,6 +83,8 @@ class BuildConfigTest(unittest.TestCase):
         self.assertEqual(settings['pull_policy'], ['always'])
         self.assertEqual(settings['allowed_pull_policies'], ['always'])
         self.assertFalse(any(value.startswith('DOCKER_AUTH_CONFIG=') for value in runner['environment']))
+        # Runner 19.5.2+: empty allowlist denies DOCKER_AUTH_CONFIG credential helpers.
+        self.assertEqual(settings['allowed_docker_credential_helpers'], [])
 
     def test_bootstrap_pull_secret_is_scoped_to_manager_deployment_only(self):
         resources = json.loads((Path(__file__).resolve().parents[1] / 'deploy/gitlab/runner.json').read_text())['items']

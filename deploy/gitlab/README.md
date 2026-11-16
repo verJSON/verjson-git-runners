@@ -111,8 +111,9 @@ the service-account-fallback control or expired-token denial. The earlier synthe
 exact-binary [18.3.1 proof](../../docs/gitlab/evidence/runner-18.3.1-job-pull-auth.json)
 remains the only record of those controls, and it applies only to 18.3.1. Runner 19.5.2
 also adds `allowed_docker_credential_helpers`: a job's `DOCKER_AUTH_CONFIG` cannot run
-credential helpers unless that setting allows them. These jobs use inline credentials and
-are unaffected. Namespace-scoped manager permissions to
+credential helpers unless that setting allows them. The credential-free generator emits
+`allowed_docker_credential_helpers = []` so helpers stay denied. These jobs use inline
+credentials and are unaffected. Namespace-scoped manager permissions to
 create/delete job Secrets remain necessary; job service accounts receive no API
 token or corresponding permissions.
 
