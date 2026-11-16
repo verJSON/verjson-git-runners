@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # GENERATED FILE — do not edit by hand.
-# Contract: 635aca975b1aa93660138875ba9616b27693476f
-# Source: Verjson/.github/scripts/container_registry_destinations.py@635aca975b1aa93660138875ba9616b27693476f
+# Contract: 19b94586a564c0276e967cf2fd8633bc0f02a53f
+# Source: Verjson/.github/scripts/container_registry_destinations.py@19b94586a564c0276e967cf2fd8633bc0f02a53f
 """Validate and expand the reviewed OCI candidate registry destinations."""
 
 from __future__ import annotations
