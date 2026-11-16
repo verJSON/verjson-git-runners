@@ -24,6 +24,8 @@ jobs:
         run: python3 tests/installer_migration_test.py
       - name: Validate Nexus-pinned GitLab build configuration
         run: python3 tests/gitlab_build_config_test.py
+      - name: Validate GitLab generator isolation templates
+        run: bash tests/gitlab_build_config_isolation_test.sh
       - name: Run entrypoint unit test suite
         run: bash tests/entrypoint_test.sh
       - name: Validate PowerShell setup architecture labels

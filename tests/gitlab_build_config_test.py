@@ -101,11 +101,83 @@ class BuildConfigTest(unittest.TestCase):
         for name in ('privileged', 'allow_privilege_escalation', 'automount_service_account_token', 'bearer_token_overwrite_allowed'):
             self.assertFalse(settings[name])
         self.assertEqual(settings['cap_drop'], ['ALL'])
-        self.assertNotIn('volumes', settings)
+        volumes = settings['volumes']
+        self.assertEqual(set(volumes), {'config_map'})
+        for forbidden in ('host_path', 'secret', 'pvc', 'csi', 'nfs', 'empty_dir'):
+            self.assertNotIn(forbidden, volumes)
         for prefix in ('', 'helper_'):
             for resource in ('cpu', 'memory', 'ephemeral_storage'):
                 self.assertTrue(settings[prefix + resource + '_limit'])
         self.assertEqual(settings['allowed_pull_policies'], ['always'])
+
+    def test_emits_read_only_public_approval_mounts_without_secrets(self):
+        settings = tomllib.loads(config.render(contract()))['runners'][0]['kubernetes']
+        mounts = settings['volumes']['config_map']
+        self.assertEqual(mounts, [
+            {'name': 'verjson-candidate-acquisition', 'mount_path': '/etc/verjson-candidate-acquisition', 'read_only': True},
+            {'name': 'verjson-candidate-execution', 'mount_path': '/etc/verjson-candidate-execution', 'read_only': True},
+            {'name': 'verjson-dependency-acquisition', 'mount_path': '/etc/verjson-dependency-acquisition', 'read_only': True},
+        ])
+        rendered = config.render(contract())
+        for needle in ('host_path', '[[runners.kubernetes.volumes.secret]]', 'docker.sock', 'DOCKER_AUTH_CONFIG='):
+            self.assertNotIn(needle, rendered)
+
+    def test_admission_disables_service_links_and_labels_restricted_jobs(self):
+        runner = tomllib.loads(config.render(contract()))['runners'][0]
+        settings = runner['kubernetes']
+        self.assertFalse(settings['enable_service_links'])
+        self.assertEqual(settings['pod_labels'], {'verjson.io/isolation': 'restricted'})
+        self.assertEqual(settings['pod_labels_overwrite_allowed'], '')
+        self.assertEqual(settings['allowed_services'], ['services-disabled.invalid/no-image@sha256:' + '0' * 64])
+
+    def test_egress_network_policy_is_credential_free_and_namespace_scoped(self):
+        data = contract()
+        policy = config.render_egress(data)
+        self.assertEqual(policy['apiVersion'], 'networking.k8s.io/v1')
+        self.assertEqual(policy['kind'], 'NetworkPolicy')
+        self.assertEqual(policy['metadata']['namespace'], data['namespace'])
+        self.assertEqual(policy['metadata']['name'], 'verjson-job-isolation')
+        spec = policy['spec']
+        self.assertEqual(spec['podSelector'], {'matchLabels': {'verjson.io/isolation': 'restricted'}})
+        self.assertEqual(spec['policyTypes'], ['Ingress', 'Egress'])
+        self.assertEqual(spec['ingress'], [])
+        egress = spec['egress']
+        self.assertEqual(egress[0]['ports'], [
+            {'protocol': 'UDP', 'port': 53},
+            {'protocol': 'TCP', 'port': 53},
+        ])
+        self.assertEqual(
+            egress[0]['to'][0]['podSelector'],
+            {'matchLabels': {'k8s-app': 'kube-dns'}},
+        )
+        public = egress[1]['to'][0]['ipBlock']
+        self.assertEqual(public['cidr'], '0.0.0.0/0')
+        isolation = next(
+            item
+            for item in json.loads(
+                (Path(__file__).resolve().parents[1] / 'deploy/gitlab/runner.json').read_text()
+            )['items']
+            if item.get('kind') == 'NetworkPolicy' and item['metadata']['name'] == 'runner-isolation'
+        )
+        reviewed_public = next(
+            rule['to'][0]['ipBlock']
+            for rule in isolation['spec']['egress']
+            if rule.get('to') and 'ipBlock' in rule['to'][0]
+        )
+        self.assertEqual(public['except'], reviewed_public['except'])
+        self.assertEqual(egress[1]['ports'], [{'protocol': 'TCP', 'port': 443}])
+        reviewed_ports = next(
+            rule['ports']
+            for rule in isolation['spec']['egress']
+            if rule.get('to') and 'ipBlock' in rule['to'][0]
+        )
+        self.assertEqual(egress[1]['ports'], reviewed_ports)
+        # Jobs-only selector must not grant Traefik :8443 (manager/API path).
+        serialized = json.dumps(policy)
+        self.assertNotIn('traefik', serialized.lower())
+        self.assertNotIn('8443', serialized)
+        for needle in ('password', 'token', 'secret', 'private_key', 'DOCKER_AUTH'):
+            self.assertNotIn(needle.lower(), serialized.lower())
 
     def test_rejects_untrusted_mutable_or_mismatched_image_records(self):
         changes = [('build', 'destination', 'nexus.example.org/build:latest'), ('build', 'source', 'ghcr.io/other/image@sha256:' + '1' * 64), ('build', 'destination', 'evil.example.org/build@sha256:' + '1' * 64), ('build', 'destination', 'nexus.example.org/build@sha256:' + '9' * 64), ('manager', 'source', 'ghcr.io/verjson/gha-runner@sha256:' + '2' * 64), ('helper', 'version', '18.2.0'), ('helper', 'version', 'latest'), ('build', 'source', 'ghcrXio/verjson/gha-runner@sha256:' + '1' * 64), ('build', 'version', '01.2.3')]

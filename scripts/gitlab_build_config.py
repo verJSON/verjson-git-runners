@@ -10,12 +10,34 @@ class ContractError(ValueError):
     pass
 
 
+# Root-owned, job-nonwritable public approval/trust/supervisor inputs only.
+# Never emit hostPath, Secret, PVC, CSI, NFS, or Docker-socket mounts here.
+ISOLATION_CONFIG_MAP_MOUNTS = (
+    {'name': 'verjson-candidate-acquisition', 'mount_path': '/etc/verjson-candidate-acquisition'},
+    {'name': 'verjson-candidate-execution', 'mount_path': '/etc/verjson-candidate-execution'},
+    {'name': 'verjson-dependency-acquisition', 'mount_path': '/etc/verjson-dependency-acquisition'},
+)
+
+ISOLATION_POD_LABEL = 'verjson.io/isolation'
+ISOLATION_POD_LABEL_VALUE = 'restricted'
+# Match deploy/gitlab/runner.json runner-isolation public ipBlock.except order.
+PRIVATE_EGRESS_EXCEPTIONS = (
+    '10.0.0.0/8',
+    '172.16.0.0/12',
+    '192.168.0.0/16',
+    '127.0.0.0/8',
+    '169.254.0.0/16',
+    '100.64.0.0/10',
+    '224.0.0.0/4',
+)
+
+
 def require(condition, message):
     if not condition:
         raise ContractError(message)
 
 
-def render(contract):
+def validate(contract):
     require(isinstance(contract, dict), 'contract must be an object')
     required = {'registry', 'namespace', 'architecture', 'build', 'manager', 'helper'}
     require(set(contract) in (required, required | {'runtime'}), 'unexpected contract fields')
@@ -51,6 +73,11 @@ def render(contract):
         require(re.fullmatch(r'sha256:[0-9a-f]{64}', runtime['artifactLicenseInventoryDigest']), 'runtime must bind its artifact-license inventory')
         require(runtime['trust'] == 'reviewed-bootstrap-candidate', 'runtime bootstrap trust must be explicit')
         allowed.append(runtime['destination'])
+    return namespace, allowed
+
+
+def render(contract):
+    namespace, allowed = validate(contract)
     build = json.dumps(contract['build']['destination'])
     helper = json.dumps(contract['helper']['destination'])
     seccomp_patch = json.dumps({'securityContext': {'seccompProfile': {'type': 'RuntimeDefault'}}})
@@ -58,8 +85,17 @@ def render(contract):
         {'name': name, 'env': [{'name': 'HOME', 'value': '/tmp'}]}
         for name in ('build', 'helper')
     ]})
+    mounts = ''.join(
+        f'''    [[runners.kubernetes.volumes.config_map]]
+      name = {json.dumps(mount['name'])}
+      mount_path = {json.dumps(mount['mount_path'])}
+      read_only = true
+'''
+        for mount in ISOLATION_CONFIG_MAP_MOUNTS
+    )
     return f'''# Install using manager image: {contract['manager']['destination']}
 # Version/architecture and provenance must be verified from publication receipts.
+# Isolation mounts are public ConfigMaps only; never secrets, hostPath, or sockets.
 concurrent = 1
 [[runners]]
   executor = "kubernetes"
@@ -79,6 +115,7 @@ concurrent = 1
     allowed_pull_policies = ["always"]
     image_pull_secrets = []
     use_service_account_image_pull_secrets = false
+    enable_service_links = false
     privileged = false
     allow_privilege_escalation = false
     cap_drop = ["ALL"]
@@ -102,7 +139,9 @@ concurrent = 1
     helper_memory_limit = "512Mi"
     helper_ephemeral_storage_request = "128Mi"
     helper_ephemeral_storage_limit = "1Gi"
-    [runners.kubernetes.node_selector]
+    [runners.kubernetes.pod_labels]
+      {json.dumps(ISOLATION_POD_LABEL)} = {json.dumps(ISOLATION_POD_LABEL_VALUE)}
+{mounts}    [runners.kubernetes.node_selector]
       "kubernetes.io/arch" = {json.dumps(contract['architecture'])}
     [[runners.kubernetes.pod_spec]]
     name = "restricted-seccomp"
@@ -124,12 +163,78 @@ concurrent = 1
 '''
 
 
+def render_egress(contract):
+    """Credential-free job NetworkPolicy template for review/apply with the runner config."""
+    namespace, _allowed = validate(contract)
+    return {
+        'apiVersion': 'networking.k8s.io/v1',
+        'kind': 'NetworkPolicy',
+        'metadata': {
+            'name': 'verjson-job-isolation',
+            'namespace': namespace,
+        },
+        'spec': {
+            'podSelector': {
+                'matchLabels': {
+                    ISOLATION_POD_LABEL: ISOLATION_POD_LABEL_VALUE,
+                },
+            },
+            'policyTypes': ['Ingress', 'Egress'],
+            'ingress': [],
+            'egress': [
+                {
+                    'to': [
+                        {
+                            'namespaceSelector': {
+                                'matchLabels': {
+                                    'kubernetes.io/metadata.name': 'kube-system',
+                                },
+                            },
+                            'podSelector': {
+                                'matchLabels': {
+                                    'k8s-app': 'kube-dns',
+                                },
+                            },
+                        },
+                    ],
+                    'ports': [
+                        {'protocol': 'UDP', 'port': 53},
+                        {'protocol': 'TCP', 'port': 53},
+                    ],
+                },
+                {
+                    'to': [
+                        {
+                            'ipBlock': {
+                                'cidr': '0.0.0.0/0',
+                                'except': list(PRIVATE_EGRESS_EXCEPTIONS),
+                            },
+                        },
+                    ],
+                    'ports': [
+                        {'protocol': 'TCP', 'port': 443},
+                    ],
+                },
+            ],
+        },
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('contract', type=Path)
+    parser.add_argument(
+        '--egress',
+        action='store_true',
+        help='emit the credential-free job NetworkPolicy JSON instead of config.toml',
+    )
     args = parser.parse_args()
     try:
-        print(render(json.loads(args.contract.read_text())), end='')
+        contract = json.loads(args.contract.read_text())
+        if args.egress:
+            print(json.dumps(render_egress(contract), indent=2, sort_keys=True))
+        else:
+            print(render(contract), end='')
     except (ContractError, OSError, json.JSONDecodeError) as error:
         parser.exit(2, f'gitlab-build-config: {error}\n')
 
