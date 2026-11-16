@@ -146,10 +146,36 @@ class BuildConfigTest(unittest.TestCase):
             {'protocol': 'UDP', 'port': 53},
             {'protocol': 'TCP', 'port': 53},
         ])
+        self.assertEqual(
+            egress[0]['to'][0]['podSelector'],
+            {'matchLabels': {'k8s-app': 'kube-dns'}},
+        )
         public = egress[1]['to'][0]['ipBlock']
         self.assertEqual(public['cidr'], '0.0.0.0/0')
-        self.assertEqual(public['except'], ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '100.64.0.0/10', '169.254.0.0/16'])
+        isolation = next(
+            item
+            for item in json.loads(
+                (Path(__file__).resolve().parents[1] / 'deploy/gitlab/runner.json').read_text()
+            )['items']
+            if item.get('kind') == 'NetworkPolicy' and item['metadata']['name'] == 'runner-isolation'
+        )
+        reviewed_public = next(
+            rule['to'][0]['ipBlock']
+            for rule in isolation['spec']['egress']
+            if rule.get('to') and 'ipBlock' in rule['to'][0]
+        )
+        self.assertEqual(public['except'], reviewed_public['except'])
+        self.assertEqual(egress[1]['ports'], [{'protocol': 'TCP', 'port': 443}])
+        reviewed_ports = next(
+            rule['ports']
+            for rule in isolation['spec']['egress']
+            if rule.get('to') and 'ipBlock' in rule['to'][0]
+        )
+        self.assertEqual(egress[1]['ports'], reviewed_ports)
+        # Jobs-only selector must not grant Traefik :8443 (manager/API path).
         serialized = json.dumps(policy)
+        self.assertNotIn('traefik', serialized.lower())
+        self.assertNotIn('8443', serialized)
         for needle in ('password', 'token', 'secret', 'private_key', 'DOCKER_AUTH'):
             self.assertNotIn(needle.lower(), serialized.lower())
 

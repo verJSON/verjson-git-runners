@@ -20,12 +20,15 @@ ISOLATION_CONFIG_MAP_MOUNTS = (
 
 ISOLATION_POD_LABEL = 'verjson.io/isolation'
 ISOLATION_POD_LABEL_VALUE = 'restricted'
+# Match deploy/gitlab/runner.json runner-isolation public ipBlock.except order.
 PRIVATE_EGRESS_EXCEPTIONS = (
     '10.0.0.0/8',
     '172.16.0.0/12',
     '192.168.0.0/16',
-    '100.64.0.0/10',
+    '127.0.0.0/8',
     '169.254.0.0/16',
+    '100.64.0.0/10',
+    '224.0.0.0/4',
 )
 
 
@@ -207,6 +210,9 @@ def render_egress(contract):
                                 'except': list(PRIVATE_EGRESS_EXCEPTIONS),
                             },
                         },
+                    ],
+                    'ports': [
+                        {'protocol': 'TCP', 'port': 443},
                     ],
                 },
             ],

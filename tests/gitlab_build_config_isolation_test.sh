@@ -30,8 +30,11 @@ cat >"${contract}" <<'EOF'
 EOF
 
 toml="$(python3 "${root}/scripts/gitlab_build_config.py" "${contract}")"
-printf '%s' "${toml}" | grep -F 'name = "verjson-candidate-acquisition"' >/dev/null
-printf '%s' "${toml}" | grep -F 'mount_path = "/etc/verjson-candidate-acquisition"' >/dev/null
+for mount in verjson-candidate-acquisition verjson-candidate-execution verjson-dependency-acquisition; do
+  printf '%s' "${toml}" | grep -F "name = \"${mount}\"" >/dev/null
+  printf '%s' "${toml}" | grep -F "mount_path = \"/etc/${mount}\"" >/dev/null
+done
+printf '%s' "${toml}" | grep -F 'read_only = true' >/dev/null
 printf '%s' "${toml}" | grep -F 'enable_service_links = false' >/dev/null
 printf '%s' "${toml}" | grep -F '"verjson.io/isolation" = "restricted"' >/dev/null
 ! printf '%s' "${toml}" | grep -E 'volumes\.(host_path|secret|pvc|csi|nfs)|docker\.sock|DOCKER_AUTH_CONFIG=' >/dev/null
@@ -39,10 +42,38 @@ printf '%s' "${toml}" | grep -F '"verjson.io/isolation" = "restricted"' >/dev/nu
 egress="$(python3 "${root}/scripts/gitlab_build_config.py" --egress "${contract}")"
 printf '%s' "${egress}" | python3 -c '
 import json, sys
+from pathlib import Path
+
 policy = json.load(sys.stdin)
 assert policy["kind"] == "NetworkPolicy"
 assert policy["metadata"]["namespace"] == "gitlab-jobs"
 assert policy["spec"]["ingress"] == []
 assert "secret" not in json.dumps(policy).lower()
+egress = policy["spec"]["egress"]
+assert egress[0]["to"][0]["podSelector"] == {"matchLabels": {"k8s-app": "kube-dns"}}
+public = egress[1]["to"][0]["ipBlock"]
+assert public["cidr"] == "0.0.0.0/0"
+assert egress[1]["ports"] == [{"protocol": "TCP", "port": 443}]
+root = Path(sys.argv[1])
+isolation = next(
+    item
+    for item in json.loads((root / "deploy/gitlab/runner.json").read_text())["items"]
+    if item.get("kind") == "NetworkPolicy" and item["metadata"]["name"] == "runner-isolation"
+)
+reviewed = next(
+    rule["to"][0]["ipBlock"]
+    for rule in isolation["spec"]["egress"]
+    if rule.get("to") and "ipBlock" in rule["to"][0]
+)
+assert public["except"] == reviewed["except"], (public["except"], reviewed["except"])
+reviewed_ports = next(
+    rule["ports"]
+    for rule in isolation["spec"]["egress"]
+    if rule.get("to") and "ipBlock" in rule["to"][0]
+)
+assert egress[1]["ports"] == reviewed_ports
+serialized = json.dumps(policy).lower()
+assert "traefik" not in serialized
+assert "8443" not in serialized
 print("GitLab generator isolation contract passed")
-'
+' "${root}"
