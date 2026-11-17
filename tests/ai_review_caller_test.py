@@ -19,6 +19,7 @@ GENERATED_ARTIFACTS_CONTRACT = _PINS['generated-artifacts']
 CONTAINER_CONTRACT = _PINS['containers']
 CONTAINER_DEPLOYMENT_CONTRACT = _PINS['container-deployment']
 QUALITY_REVIEW_CONTRACT = _PINS['quality-review']
+MERGE_ADMISSION_CONTRACT = _PINS['merge-admission']
 
 # Under `secrets: inherit` the caller names no secret, so nothing in its text
 # bounds what it hands the callee. Byte identity is what is left: these are
@@ -130,6 +131,7 @@ class ReviewCallerTest(unittest.TestCase):
             'container-deployment.yml': CONTAINER_DEPLOYMENT_CONTRACT,
             'container-deployment-review-producer.yml': CONTAINER_DEPLOYMENT_CONTRACT,
             'quality-review.yml': QUALITY_REVIEW_CONTRACT,
+            'merge-admission.yml': MERGE_ADMISSION_CONTRACT,
         }
         # A narrow callee pattern does not fail on a name it cannot match — it
         # skips it, so a caller named outside the pattern escapes the whole
