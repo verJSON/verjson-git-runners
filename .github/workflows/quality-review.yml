@@ -1,0 +1,21 @@
+# GENERATED FILE — do not edit by hand.
+# Regenerate with:
+#   scripts/gen-quality-review-caller.sh ee9899ba3803ed95f5883bd65a30952777f4ce7b > .github/workflows/quality-review.yml
+#
+# Advisory quality review (#1820 / ADR 0270). Never a required check.
+name: quality-review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    uses: Verjson/.github/.github/workflows/quality-review.yml@ee9899ba3803ed95f5883bd65a30952777f4ce7b
+    secrets: inherit
+    with:
+      contract_ref: ee9899ba3803ed95f5883bd65a30952777f4ce7b
