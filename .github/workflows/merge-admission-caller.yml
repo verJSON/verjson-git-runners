@@ -1,0 +1,36 @@
+# GENERATED FILE — do not edit by hand.
+# Regenerate with:
+#   scripts/gen-merge-admission-caller.sh dc3008626f4b7da78bdf5e88da9c46fe2510f500 \[\"Merge\ admission\ trigger\"\,\"AI\ review\ label\ re-arm\"\,\"AI\ review\ lifecycle\ re-arm\"\,\"changelog\ contract\"\,\"generated\ artifacts\"\,\"immutable\ container\ candidate\"\,\"gate\ re-arm\"\,\"image\ build\ check\"\,\"quality-review\"\,\"test\"\] > .github/workflows/merge-admission-caller.yml
+#
+# Thin caller for the immutable merge-admission producer in Verjson/.github
+# (ADR 0260 C10 (iv)). Completions of the listed workflows, the 15-minute sweep,
+# and a manual dispatch start the producer on the default-branch commit.
+name: Merge admission
+
+on:
+  workflow_run:
+    workflows: ["Merge admission trigger","AI review label re-arm","AI review lifecycle re-arm","changelog contract","generated artifacts","immutable container candidate","gate re-arm","image build check","quality-review","test"]
+    types: [completed]
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch: {}
+
+concurrency:
+  group: merge-admission-caller-${{ contains(fromJSON('["pull_request","pull_request_target","pull_request_review"]'), github.event.workflow_run.event) && github.event.workflow_run.head_sha || 'sweep' }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  admit:
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+      pull-requests: read
+      statuses: read
+    uses: Verjson/.github/.github/workflows/merge-admission.yml@dc3008626f4b7da78bdf5e88da9c46fe2510f500
+    secrets: inherit
+    with:
+      ai_review_environment: ai-review-app
