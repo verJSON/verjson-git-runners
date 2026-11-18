@@ -34,7 +34,7 @@ permissions:
   pull-requests: read
 jobs:
   deploy:
-    uses: Verjson/.github/.github/workflows/container-deployment.yml@03da2f159499203c4593a362ace629cfd3942445
+    uses: Verjson/.github/.github/workflows/container-deployment.yml@43c1a479f50b5cde83c1474b514d90e770770701
     secrets: inherit
     with:
       manifest-identity: ${{ inputs.manifest-identity }}
@@ -43,4 +43,4 @@ jobs:
       rollback-receipt: ${{ inputs.rollback-receipt }}
       dry-run: ${{ inputs.dry-run }}
       config-path: container-deployment.json
-      contract-ref: 03da2f159499203c4593a362ace629cfd3942445
+      contract-ref: 43c1a479f50b5cde83c1474b514d90e770770701
