@@ -12,7 +12,7 @@ permissions:
   pull-requests: read
 jobs:
   produce:
-    uses: Verjson/.github/.github/workflows/container-deployment-review-producer.yml@03da2f159499203c4593a362ace629cfd3942445
+    uses: Verjson/.github/.github/workflows/container-deployment-review-producer.yml@43c1a479f50b5cde83c1474b514d90e770770701
     secrets: inherit
     with:
       kind: code
