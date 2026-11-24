@@ -87,8 +87,11 @@ test "${runs_on}" = '${{ fromJSON(vars.CI_LANE_TRUSTED) }}' \
   || fail "the bubblewrap job does not select CI_LANE_TRUSTED directly: ${runs_on}"
 
 # A probe cannot report green while tolerating its own failure.
-! grep -Eq '^[[:space:]]+continue-on-error:' <<<"${bubblewrap_job}" \
-  || fail "the lane probe tolerates its own failure"
+if grep -Eq '^[[:space:]]+continue-on-error:' <<<"${bubblewrap_job}"; then
+  fail "the lane probe tolerates its own failure"
+elif (( $? != 1 )); then
+  fail "could not check the lane probe for continue-on-error"
+fi
 
 # Control the job scoping: a sibling job cannot provide the expected probe.
 fixture_dir="$(mktemp -d)"

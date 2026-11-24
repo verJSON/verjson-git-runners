@@ -8,4 +8,5 @@ title: Select the trusted lane for the scheduled conformance probe
 
 The scheduled Bubblewrap check selects the runner pool named by
 `CI_LANE_TRUSTED`. The credential-reference test now reports a forbidden
-workflow reference and fails if it cannot complete a search.
+workflow reference and fails if it cannot complete a search. The lane conformance
+test also fails if it cannot check whether the probe tolerates job failures.
