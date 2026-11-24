@@ -37,7 +37,13 @@ done
 printf '%s' "${toml}" | grep -F 'read_only = true' >/dev/null
 printf '%s' "${toml}" | grep -F 'enable_service_links = false' >/dev/null
 printf '%s' "${toml}" | grep -F '"verjson.io/isolation" = "restricted"' >/dev/null
-! printf '%s' "${toml}" | grep -E 'volumes\.(host_path|secret|pvc|csi|nfs)|docker\.sock|DOCKER_AUTH_CONFIG=' >/dev/null
+shopt -u nocasematch
+case "${toml}" in
+  *volumes.host_path*|*volumes.secret*|*volumes.pvc*|*volumes.csi*|*volumes.nfs*|*docker.sock*|*DOCKER_AUTH_CONFIG=*)
+    printf 'Forbidden setting in generated GitLab runner configuration\n' >&2
+    exit 1
+    ;;
+esac
 
 egress="$(python3 "${root}/scripts/gitlab_build_config.py" --egress "${contract}")"
 printf '%s' "${egress}" | python3 -c '
