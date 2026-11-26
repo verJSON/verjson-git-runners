@@ -79,16 +79,19 @@ runs_on="$(awk '
   }
 ' <<<"${bubblewrap_job}")"
 [[ -n "${runs_on}" ]] || fail "the bubblewrap job declares no runs-on"
-[[ "${runs_on}" == *'fromJSON(vars.VERJSON_RUNNER_DEFAULT'* ]] \
-  || fail "the bubblewrap job does not resolve the shared lane variable: ${runs_on}"
 [[ "${runs_on}" != *'ubuntu-'* && "${runs_on}" != *'self-hosted'* ]] \
   || fail "the bubblewrap job hardcodes a runner selector: ${runs_on}"
 [[ "${runs_on}" != *'||'* ]] \
   || fail "the bubblewrap job falls back off the lane it exists to measure: ${runs_on}"
+test "${runs_on}" = '${{ fromJSON(vars.CI_LANE_TRUSTED) }}' \
+  || fail "the bubblewrap job does not select CI_LANE_TRUSTED directly: ${runs_on}"
 
 # A probe cannot report green while tolerating its own failure.
-! grep -Eq '^[[:space:]]+continue-on-error:' <<<"${bubblewrap_job}" \
-  || fail "the lane probe tolerates its own failure"
+if grep -Eq '^[[:space:]]+continue-on-error:' <<<"${bubblewrap_job}"; then
+  fail "the lane probe tolerates its own failure"
+elif (( $? != 1 )); then
+  fail "could not check the lane probe for continue-on-error"
+fi
 
 # Control the job scoping: a sibling job cannot provide the expected probe.
 fixture_dir="$(mktemp -d)"
@@ -100,7 +103,7 @@ on:
 jobs:
   bubblewrap:
     if: github.ref == 'refs/heads/main'
-    runs-on: fromJSON(vars.VERJSON_RUNNER_DEFAULT)
+    runs-on: ${{ fromJSON(vars.CI_LANE_TRUSTED) }}
     steps:
       - uses: actions/checkout@0000000000000000000000000000000000000000
         with:

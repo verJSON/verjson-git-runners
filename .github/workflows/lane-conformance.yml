@@ -34,7 +34,7 @@ jobs:
     # the one job whose entire purpose is to measure the self-hosted lane onto a hosted
     # runner and report its unrelated conformance as success. A missing variable must fail
     # this job, not silently redirect it.
-    runs-on: ${{ fromJSON(vars.VERJSON_RUNNER_DEFAULT) }}
+    runs-on: ${{ fromJSON(vars.CI_LANE_TRUSTED) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
