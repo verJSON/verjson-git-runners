@@ -9,11 +9,15 @@ the network.
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
+import http.client
 import importlib.util
 import io
 import json
 import subprocess
+import sys
+import traceback
 import unittest
 import urllib.error
 from pathlib import Path
@@ -26,6 +30,8 @@ SPEC = importlib.util.spec_from_file_location("runner_deployment_evidence", SCRI
 assert SPEC is not None and SPEC.loader is not None
 EVIDENCE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(EVIDENCE)
+with patch.object(sys, "path", [str(ROOT / "scripts"), *sys.path]):
+    from container_deployment_controller import DeploymentError, ProcessAdapter
 
 MANIFEST_IDENTITY = "sha256:" + "a" * 64
 MANIFEST_BYTES = json.dumps({"releaseVersion": "1.2.3", "images": []}, sort_keys=True).encode("utf-8")
@@ -296,6 +302,93 @@ class MainTest(unittest.TestCase):
             with patch.object(EVIDENCE, "DEFAULT_ROOT", repo):
                 exit_code = EVIDENCE.main(["--manifest-identity", "bad", "--fleet", "github-canary"])
             self.assertEqual(exit_code, 1)
+
+
+class ControllerRelayTest(unittest.TestCase):
+    provider_text = "https://provider.example/download?token=synthetic-private-value"
+
+    def assert_relayed(self, opener, diagnostic, *, git_failure=None):
+        with TemporaryDirectory() as raw:
+            repo = _make_repo(Path(raw))
+            command = ["python3", "scripts/runner-deployment-evidence.py", "--manifest-identity",
+                       REAL_DIGEST, "--fleet", "github-canary"]
+            git_run = subprocess.run
+
+            def run_git(args, **kwargs):
+                if git_failure is not None and args[-1] == git_failure[0]:
+                    raise git_failure[1]
+                return git_run(args, **kwargs)
+
+            def invoke(args, *, timeout_seconds):
+                stderr = io.StringIO()
+                with contextlib.redirect_stderr(stderr):
+                    try:
+                        status = EVIDENCE.main(args[2:])
+                    except (OSError, http.client.HTTPException, subprocess.CalledProcessError):
+                        traceback.print_exc()
+                        status = 1
+                self.assertNotEqual(status, 0)
+                raise subprocess.CalledProcessError(status, args, stderr=stderr.getvalue())
+
+            with patch.object(EVIDENCE, "DEFAULT_ROOT", repo), \
+                    patch.object(EVIDENCE.urllib.request, "urlopen", opener), \
+                    patch.object(EVIDENCE.subprocess, "run", side_effect=run_git), \
+                    patch.object(ProcessAdapter, "_invoke", side_effect=invoke), \
+                    self.assertRaises(DeploymentError) as rejected:
+                ProcessAdapter._run(command)
+            self.assertEqual(str(rejected.exception), f"adapter command failed: {diagnostic}")
+
+    def test_relays_fixed_http_diagnostics_for_each_release_stage(self):
+        for stages, operation in (
+            ((), "GitHub release metadata request"),
+            ((_release_tags_payload(),), "GitHub release manifest download"),
+        ):
+            for code in (403, 429):
+                with self.subTest(operation=operation, code=code):
+                    failure = urllib.error.HTTPError(self.provider_text, code, self.provider_text, {}, io.BytesIO())
+                    self.assert_relayed(_opener_sequence(*stages, failure), f"{operation} failed (HTTP {code})")
+                    self.assertTrue(failure.fp.closed)
+
+    def test_relays_network_diagnostics_without_dns_reason(self):
+        for stages, operation in (
+            ((), "GitHub release metadata request"),
+            ((_release_tags_payload(),), "GitHub release manifest download"),
+        ):
+            with self.subTest(operation=operation):
+                failure = urllib.error.URLError(self.provider_text)
+                self.assert_relayed(_opener_sequence(*stages, failure), f"{operation} is unreachable")
+
+    def test_relays_network_diagnostics_when_response_read_fails(self):
+        for stages, operation in (
+            ((), "GitHub release metadata request"),
+            ((_FakeResponse(_release_tags_payload()),), "GitHub release manifest download"),
+        ):
+            for error in (TimeoutError(self.provider_text), http.client.IncompleteRead(b"untrusted response")):
+                with self.subTest(operation=operation, error=type(error).__name__):
+                    response = _FakeResponse(b"")
+                    responses = iter((*stages, response))
+                    with patch.object(response, "read", side_effect=error):
+                        self.assert_relayed(lambda request, timeout: next(responses), f"{operation} is unreachable")
+
+    def test_relays_no_status_when_http_error_contains_no_valid_error_code(self):
+        for code in (200, True, self.provider_text):
+            with self.subTest(code=code):
+                failure = urllib.error.HTTPError(self.provider_text, code, self.provider_text, {}, io.BytesIO())
+                self.assert_relayed(_opener_sequence(failure), "GitHub release metadata request failed")
+
+    def test_relays_malformed_release_metadata_without_the_url(self):
+        self.assert_relayed(_opener_sequence(b"untrusted non JSON body"),
+                            "GitHub release metadata response is not valid JSON")
+
+    def test_relays_fixed_checkout_diagnostics_when_git_fails(self):
+        for revision, label, failure in (
+            ("HEAD", "commit", subprocess.CalledProcessError(128, ["git"], stderr=self.provider_text)),
+            ("HEAD^{tree}", "tree", OSError(self.provider_text)),
+        ):
+            with self.subTest(revision=revision):
+                opener = _opener_sequence(_release_tags_payload(), MANIFEST_BYTES)
+                self.assert_relayed(opener, f"runner evidence checkout {label} lookup failed",
+                                    git_failure=(revision, failure))
 
 
 if __name__ == "__main__":
