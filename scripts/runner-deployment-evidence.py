@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import http.client
 import json
 import re
 import subprocess
@@ -45,15 +46,20 @@ class EvidenceError(Exception):
 
 
 def git_head_commit(root: Path) -> str:
-    return subprocess.run(
-        ["git", "rev-parse", "HEAD"], cwd=root, check=True, capture_output=True, text=True,
-    ).stdout.strip()
+    return _git_revision(root, "HEAD", "commit")
 
 
 def git_head_tree(root: Path) -> str:
-    return subprocess.run(
-        ["git", "rev-parse", "HEAD^{tree}"], cwd=root, check=True, capture_output=True, text=True,
-    ).stdout.strip()
+    return _git_revision(root, "HEAD^{tree}", "tree")
+
+
+def _git_revision(root: Path, revision: str, kind: str) -> str:
+    try:
+        return subprocess.run(
+            ["git", "rev-parse", revision], cwd=root, check=True, capture_output=True, text=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise EvidenceError(f"runner evidence checkout {kind} lookup failed") from error
 
 
 def load_config(root: Path) -> dict[str, Any]:
@@ -94,26 +100,30 @@ def find_local_manifest(root: Path, manifest_identity: str) -> tuple[str, bytes]
     )
 
 
-def _get_json(url: str, opener: Opener) -> Any:
+def _read_release_response(url: str, accept: str, operation: str, opener: Opener) -> bytes:
     request = urllib.request.Request(
-        url, headers={"Accept": "application/vnd.github+json", "User-Agent": USER_AGENT},
+        url, headers={"Accept": accept, "User-Agent": USER_AGENT},
     )
     try:
         with opener(request, timeout=30) as response:
-            payload = response.read()
+            return response.read()
     except urllib.error.HTTPError as error:
-        raise EvidenceError(f"{url} returned HTTP {error.code}") from error
-    except urllib.error.URLError as error:
-        raise EvidenceError(f"{url} was unreachable: {error.reason}") from error
-    try:
-        return json.loads(payload)
-    except ValueError as error:
-        raise EvidenceError(f"{url} did not return valid JSON") from error
+        status = error.code
+        error.close()
+        if type(status) is int and 400 <= status <= 599:
+            raise EvidenceError(f"{operation} failed (HTTP {status})") from error
+        raise EvidenceError(f"{operation} failed") from error
+    except (OSError, http.client.HTTPException) as error:
+        raise EvidenceError(f"{operation} is unreachable") from error
 
 
 def fetch_release_asset_id(repository: str, version: str, *, opener: Opener = urllib.request.urlopen) -> tuple[int, int]:
     url = f"{GITHUB_API}/repos/{repository}/releases/tags/v{version}"
-    payload = _get_json(url, opener)
+    raw = _read_release_response(url, "application/vnd.github+json", "GitHub release metadata request", opener)
+    try:
+        payload = json.loads(raw)
+    except ValueError as error:
+        raise EvidenceError("GitHub release metadata response is not valid JSON") from error
     assets = payload.get("assets") if isinstance(payload, dict) else None
     if not isinstance(assets, list):
         raise EvidenceError(f"release v{version} has no asset list")
@@ -136,16 +146,7 @@ def fetch_release_asset_id(repository: str, version: str, *, opener: Opener = ur
 
 def fetch_asset_bytes(repository: str, asset_id: int, *, opener: Opener = urllib.request.urlopen) -> bytes:
     url = f"{GITHUB_API}/repos/{repository}/releases/assets/{asset_id}"
-    request = urllib.request.Request(
-        url, headers={"Accept": "application/octet-stream", "User-Agent": USER_AGENT},
-    )
-    try:
-        with opener(request, timeout=30) as response:
-            return response.read()
-    except urllib.error.HTTPError as error:
-        raise EvidenceError(f"release asset {asset_id} download failed: HTTP {error.code}") from error
-    except urllib.error.URLError as error:
-        raise EvidenceError(f"release asset {asset_id} download failed: {error.reason}") from error
+    return _read_release_response(url, "application/octet-stream", "GitHub release manifest download", opener)
 
 
 def collect_evidence(

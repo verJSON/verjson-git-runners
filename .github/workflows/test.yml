@@ -18,6 +18,8 @@ jobs:
         run: python3 tests/ai_review_caller_test.py
       - name: Pending deployment gate does not mask other contract tests
         run: python3 tests/deployment_gate_ordering_test.py
+      - name: Validate runner deployment evidence diagnostics offline
+        run: python3 tests/runner_deployment_evidence_test.py
       - name: Validate signed producer plan binding
         run: python3 tests/producer_plan_test.py
       - name: Validate GitLab installer migration
